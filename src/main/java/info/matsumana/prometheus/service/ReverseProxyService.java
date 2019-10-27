@@ -13,7 +13,7 @@ import info.matsumana.prometheus.decorator.MetricCollectingDecorator;
 public class ReverseProxyService {
 
     @Get("/proxy/:param")
-    public HttpResponse greet(@Param String param) {
+    public HttpResponse proxy(@Param String param) {
         return HttpResponse.of("param = %s", param);
     }
 }
