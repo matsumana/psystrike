@@ -1,0 +1,87 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-prometheus-reverse-proxy
+  labels:
+    app: k8s-prometheus-reverse-proxy
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-prometheus-reverse-proxy
+  template:
+    metadata:
+      labels:
+        app: k8s-prometheus-reverse-proxy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /internal/metrics
+    spec:
+      containers:
+        - name: k8s-prometheus-reverse-proxy
+          image: localhost:5000/k8s-prometheus-reverse-proxy:latest
+          command:
+            [
+              "/root/docker-entrypoint.sh",
+              "java",
+              "-XX:+UseG1GC",
+              "-Djava.rmi.server.hostname=127.0.0.1",
+              "-Dcom.sun.management.jmxremote",
+              "-Dcom.sun.management.jmxremote.rmi.port=8686",
+              "-Dcom.sun.management.jmxremote.port=8686",
+              "-Dcom.sun.management.jmxremote.local.only=false",
+              "-Dcom.sun.management.jmxremote.ssl=false",
+              "-Dcom.sun.management.jmxremote.authenticate=false",
+              "-Xlog:gc*=debug:/root/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5",
+              "-XX:StartFlightRecording=name=on_startup,filename=/root/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m",
+              "-Xms256m",
+              "-Xmx256m",
+              "-jar",
+              "/root/app.jar"
+            ]
+          ports:
+            - containerPort: 8080  # Application
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /internal/healthcheck
+              port: 8080
+            initialDelaySeconds: 60  # Need to wait until the app starts up
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /internal/healthcheck
+              port: 8080
+            initialDelaySeconds: 30  # Need to wait until the app is ready
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]  # Wait a few seconds to service-out from the Service before the SIGTERM signal is sent
+      terminationGracePeriodSeconds: 120  # Need to wait until the app shuts down
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: k8s-prometheus-reverse-proxy
+  namespace: dev
+spec:
+  type: NodePort
+  selector:
+    app: k8s-prometheus-reverse-proxy
+  ports:
+    - name: app
+      protocol: TCP
+      targetPort: 8080
+      port: 8080
+      nodePort: 31000

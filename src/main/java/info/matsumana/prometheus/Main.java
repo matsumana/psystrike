@@ -3,6 +3,7 @@ package info.matsumana.prometheus;
 import com.linecorp.armeria.common.metric.PrometheusMeterRegistries;
 import com.linecorp.armeria.server.Server;
 import com.linecorp.armeria.server.docs.DocService;
+import com.linecorp.armeria.server.healthcheck.HealthCheckService;
 import com.linecorp.armeria.server.metric.PrometheusExpositionService;
 
 import info.matsumana.prometheus.service.ReverseProxyService;
@@ -56,6 +57,7 @@ public class Main {
                      .http(PORT)
                      .meterRegistry(registry)
                      .serviceUnder(internalUri("docs"), new DocService())
+                     .serviceUnder(internalUri("healthcheck"), HealthCheckService.builder().build())
                      .service(internalUri("metrics"),
                               new PrometheusExpositionService(registry.getPrometheusRegistry()))
                      .annotatedService(new ReverseProxyService())

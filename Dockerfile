@@ -7,7 +7,7 @@ RUN apt update && \
     apt install -y -f ./bellsoft-jdk13.0.1-linux-amd64.deb
 RUN jlink \
     --compress=2 \
-    --add-modules=java.base,jdk.unsupported,java.xml,jdk.management,jdk.management.agent \
+    --add-modules=java.base,jdk.unsupported,java.xml,jdk.management,jdk.management.agent,jdk.jfr \
     --output=jre
 
 # --------------------------------
@@ -17,6 +17,8 @@ COPY --from=builder /tmp/jre /root/jre
 ADD ./build/libs/*.jar /root/app.jar
 ADD ./docker-entrypoint.sh /root/docker-entrypoint.sh
 
-CMD ["/root/docker-entrypoint.sh", "/root/jre/bin/java", "-jar", "/root/app.jar"]
+ENV PATH "/root/jre/bin:$PATH"
+
+CMD ["/root/docker-entrypoint.sh", "java", "-jar", "/root/app.jar"]
 
 EXPOSE 8080
