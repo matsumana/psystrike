@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id "io.spring.dependency-management" version "1.0.8.RELEASE"
+    id 'com.github.johnrengelman.shadow' version '5.1.0'
+}
+
+group = 'info.matsumana.prometheus'
+version = '0.0.1-SNAPSHOT'
+
+sourceCompatibility = JavaVersion.VERSION_13
+targetCompatibility = JavaVersion.VERSION_13
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+repositories {
+    mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'com.linecorp.armeria:armeria-bom:0.95.0'
+        mavenBom 'org.junit:junit-bom:5.5.2'
+    }
+    dependencies {
+        dependency 'com.google.guava:guava:28.1-jre'
+        dependency 'org.assertj:assertj-core:3.13.2'
+    }
+}
+
+dependencies {
+    implementation 'com.linecorp.armeria:armeria'
+    implementation 'com.google.guava:guava'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testImplementation 'org.assertj:assertj-core'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'info.matsumana.prometheus.App'
+    }
+}
