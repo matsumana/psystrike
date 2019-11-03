@@ -59,7 +59,24 @@ public class ReverseProxyService {
         return handleRequest(headers, httpClient);
     }
 
-    @Get("regex:^/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
+    @Get("regex:^/apiserver-metrics/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
+    public CompletableFuture<HttpResponse> proxyApiServerMetrics(@Param String host,
+                                                                 @Param int port,
+                                                                 @Param String actualUri) {
+        log.info("host=[{}]", host);
+        log.info("port=[{}]", port);
+        log.info("actual URI=[{}]", actualUri);
+
+        final String k8sToken = System.getenv(ENV_KUBERNETES_TOKEN);
+        final RequestHeaders headers = RequestHeaders.of(GET, actualUri,
+                                                         AUTHORIZATION_HEADER_KEY,
+                                                         AUTHORIZATION_HEADER_VALUE + ' ' + k8sToken);
+        final HttpClient clientForPod = newHttpClientForPod("https", host, port);
+
+        return handleRequest(headers, clientForPod);
+    }
+
+    @Get("regex:^/pod-metrics/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     public CompletableFuture<HttpResponse> proxyPodMetrics(@Param String host,
                                                            @Param int port,
                                                            @Param String actualUri) {
@@ -68,7 +85,7 @@ public class ReverseProxyService {
         log.info("actual URI=[{}]", actualUri);
 
         final RequestHeaders headers = RequestHeaders.of(GET, actualUri);
-        final HttpClient clientForPod = newHttpClientForPod(host, port);
+        final HttpClient clientForPod = newHttpClientForPod("http", host, port);
 
         return handleRequest(headers, clientForPod);
     }
@@ -83,9 +100,9 @@ public class ReverseProxyService {
                 .build();
     }
 
-    private HttpClient newHttpClientForPod(String host, int port) {
+    private HttpClient newHttpClientForPod(String scheme, String host, int port) {
         return httpClientsForPod.computeIfAbsent(host, key ->
-                new HttpClientBuilder(String.format("http://%s:%d/", host, port))
+                new HttpClientBuilder(String.format("%s://%s:%d/", scheme, host, port))
                         .decorator(newCircuitBreakerDecorator())
                         .decorator(LoggingClient.newDecorator())
                         .build());
