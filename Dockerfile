@@ -17,7 +17,8 @@ COPY --from=builder /tmp/jre /root/jre
 ADD ./build/libs/*.jar /root/app.jar
 ADD ./docker-entrypoint.sh /root/docker-entrypoint.sh
 
-ENV PATH "/root/jre/bin:$PATH"
+ENV JAVA_HOME "/root/jre"
+ENV PATH "$JAVA_HOME/bin:$PATH"
 
 CMD ["/root/docker-entrypoint.sh", "java", "-jar", "/root/app.jar"]
 

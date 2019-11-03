@@ -60,7 +60,7 @@ public class Main {
                      .serviceUnder(internalUri("healthcheck"), HealthCheckService.builder().build())
                      .service(internalUri("metrics"),
                               new PrometheusExpositionService(registry.getPrometheusRegistry()))
-                     .annotatedService(new ReverseProxyService())
+                     .annotatedService(new ReverseProxyService(registry))
                      .build();
     }
 
