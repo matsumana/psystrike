@@ -2,7 +2,9 @@ package info.matsumana.prometheus.service;
 
 import static com.linecorp.armeria.common.HttpMethod.GET;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import com.linecorp.armeria.client.Client;
@@ -38,10 +40,37 @@ public class ReverseProxyService {
 
     private final PrometheusMeterRegistry registry;
     private final HttpClient httpClient;
+    private final Map<String, HttpClient> httpClientsForPod = new ConcurrentHashMap<>();
 
     public ReverseProxyService(PrometheusMeterRegistry registry) {
         this.registry = registry;
         httpClient = newHttpClient();
+    }
+
+    @Get("regex:^/api/(?<actualUri>.*)$")
+    public CompletableFuture<HttpResponse> proxyK8sApi(@Param String actualUri) {
+        log.info("actual URI=[{}]", actualUri);
+
+        final String k8sToken = System.getenv(ENV_KUBERNETES_TOKEN);
+        final RequestHeaders headers = RequestHeaders.of(GET, "/api/" + actualUri,
+                                                         AUTHORIZATION_HEADER_KEY,
+                                                         AUTHORIZATION_HEADER_VALUE + ' ' + k8sToken);
+
+        return handleRequest(headers, httpClient);
+    }
+
+    @Get("regex:^/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
+    public CompletableFuture<HttpResponse> proxyPodMetrics(@Param String host,
+                                                           @Param int port,
+                                                           @Param String actualUri) {
+        log.info("host=[{}]", host);
+        log.info("port=[{}]", port);
+        log.info("actual URI=[{}]", actualUri);
+
+        final RequestHeaders headers = RequestHeaders.of(GET, actualUri);
+        final HttpClient clientForPod = newHttpClientForPod(host, port);
+
+        return handleRequest(headers, clientForPod);
     }
 
     private HttpClient newHttpClient() {
@@ -54,6 +83,14 @@ public class ReverseProxyService {
                 .build();
     }
 
+    private HttpClient newHttpClientForPod(String host, int port) {
+        return httpClientsForPod.computeIfAbsent(host, key ->
+                new HttpClientBuilder(String.format("http://%s:%d/", host, port))
+                        .decorator(newCircuitBreakerDecorator())
+                        .decorator(LoggingClient.newDecorator())
+                        .build());
+    }
+
     private Function<Client<HttpRequest, HttpResponse>, CircuitBreakerHttpClient> newCircuitBreakerDecorator() {
         return CircuitBreakerHttpClient.newPerHostDecorator(
                 name -> CircuitBreaker.builder("k8s-reverse-proxy" + '_' + name)
@@ -62,16 +99,11 @@ public class ReverseProxyService {
                 CircuitBreakerStrategy.onServerErrorStatus());
     }
 
-    @Get("regex:^/api/(?<actualUri>.*)$")
-    public CompletableFuture<HttpResponse> proxyApi(@Param String actualUri) {
-        log.info("actual URI=[{}]", actualUri);
-
-        final String k8sToken = System.getenv(ENV_KUBERNETES_TOKEN);
-        final RequestHeaders headers = RequestHeaders.of(GET, "/api/" + actualUri,
-                                                         AUTHORIZATION_HEADER_KEY,
-                                                         AUTHORIZATION_HEADER_VALUE + ' ' + k8sToken);
-        final CompletableFuture<AggregatedHttpResponse> response = httpClient.execute(headers)
-                                                                             .aggregate();
+    private static CompletableFuture<HttpResponse> handleRequest(RequestHeaders headers,
+                                                                 HttpClient clientForPod) {
+        final CompletableFuture<AggregatedHttpResponse> response = clientForPod
+                .execute(headers)
+                .aggregate();
 
         return response.handle((message, throwable) -> {
             if (throwable == null) {
