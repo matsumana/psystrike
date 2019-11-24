@@ -1,4 +1,4 @@
-package info.matsumana.prometheus.service;
+package info.matsumana.kubernetes.service;
 
 import static com.linecorp.armeria.common.HttpMethod.GET;
 
@@ -29,7 +29,7 @@ import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.server.annotation.decorator.LoggingDecorator;
 
-import info.matsumana.prometheus.decorator.MetricCollectingDecorator;
+import info.matsumana.kubernetes.decorator.MetricCollectingDecorator;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 

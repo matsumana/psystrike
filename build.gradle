@@ -5,7 +5,7 @@ plugins {
     id "com.github.johnrengelman.shadow" version "5.1.0"
 }
 
-group = "info.matsumana.prometheus"
+group = "info.matsumana.kubernetes"
 version = "0.0.1-SNAPSHOT"
 
 sourceCompatibility = JavaVersion.VERSION_13
@@ -53,6 +53,6 @@ test {
 
 jar {
     manifest {
-        attributes "Main-Class": "info.matsumana.prometheus.Application"
+        attributes "Main-Class": "info.matsumana.kubernetes.Application"
     }
 }

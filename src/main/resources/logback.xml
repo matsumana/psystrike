@@ -1,24 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <configuration>
-  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <filter class="ch.qos.logback.classic.filter.LevelFilter">
+      <level>WARN</level>
+      <onMatch>DENY</onMatch>
+    </filter>
+    <filter class="ch.qos.logback.classic.filter.LevelFilter">
+      <level>ERROR</level>
+      <onMatch>DENY</onMatch>
+      <onMismatch>ACCEPT</onMismatch>
+    </filter>
     <encoder>
       <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-      <charset>utf8</charset>
     </encoder>
+    <target>System.out</target>
+  </appender>
+  <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>WARN</level>
+    </filter>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+    <target>System.err</target>
   </appender>
 
-  <!--  <root level="WARN">-->
-  <root level="INFO">
-    <appender-ref ref="CONSOLE" />
+  <appender name="ASYNC_STDOUT" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="STDOUT" />
+  </appender>
+  <appender name="ASYNC_STDERR" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="STDERR" />
+  </appender>
+
+  <root level="WARN">
+    <appender-ref ref="ASYNC_STDERR" />
   </root>
-  <!--  <logger name="com.linecorp.armeria" level="WARN">-->
   <logger name="com.linecorp.armeria" level="INFO">
-    <appender-ref ref="CONSOLE" />
+    <appender-ref ref="ASYNC_STDOUT" />
+    <appender-ref ref="ASYNC_STDERR" />
   </logger>
-  <!--  <logger name="info.matsumana.prometheus" level="INFO">-->
-  <logger name="info.matsumana.prometheus" level="DEBUG">
-    <appender-ref ref="CONSOLE" />
+  <logger name="info.matsumana.kubernetes" level="DEBUG">
+    <appender-ref ref="ASYNC_STDOUT" />
+    <appender-ref ref="ASYNC_STDERR" />
   </logger>
 
 </configuration>

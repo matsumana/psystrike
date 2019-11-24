@@ -1,4 +1,4 @@
-package info.matsumana.prometheus.decorator;
+package info.matsumana.kubernetes.decorator;
 
 import java.util.function.Function;
 

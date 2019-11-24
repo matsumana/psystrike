@@ -1,4 +1,4 @@
-package info.matsumana.prometheus;
+package info.matsumana.kubernetes;
 
 import static com.linecorp.armeria.common.SessionProtocol.HTTP;
 import static com.linecorp.armeria.common.SessionProtocol.HTTPS;
@@ -12,7 +12,7 @@ import com.linecorp.armeria.server.Server;
 import com.linecorp.armeria.server.healthcheck.HealthCheckService;
 import com.linecorp.armeria.server.metric.PrometheusExpositionService;
 
-import info.matsumana.prometheus.service.ReverseProxyService;
+import info.matsumana.kubernetes.service.ReverseProxyService;
 import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;

@@ -1,4 +1,4 @@
-package info.matsumana.prometheus.decorator;
+package info.matsumana.kubernetes.decorator;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
