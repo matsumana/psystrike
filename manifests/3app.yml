@@ -2,27 +2,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-prometheus-reverse-proxy
+  name: k8s-proxy-prometheus
   labels:
-    app: k8s-prometheus-reverse-proxy
+    app: k8s-proxy-prometheus
   namespace: dev
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: k8s-prometheus-reverse-proxy
+      app: k8s-proxy-prometheus
   template:
     metadata:
       labels:
-        app: k8s-prometheus-reverse-proxy
+        app: k8s-proxy-prometheus
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: /metrics
     spec:
       containers:
-        - name: k8s-prometheus-reverse-proxy
-          image: localhost:5000/k8s-prometheus-reverse-proxy:latest
+        - name: k8s-proxy-prometheus
+          image: localhost:5000/k8s-proxy-prometheus:latest
           command:
             [
               "/root/docker-entrypoint.sh",
@@ -73,12 +73,12 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: k8s-prometheus-reverse-proxy
+  name: k8s-proxy-prometheus
   namespace: dev
 spec:
   type: NodePort
   selector:
-    app: k8s-prometheus-reverse-proxy
+    app: k8s-proxy-prometheus
   ports:
     - name: app
       protocol: TCP

@@ -1,1 +1,1 @@
-# k8s-prometheus-reverse-proxy
+# k8s-proxy-prometheus
