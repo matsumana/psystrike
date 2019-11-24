@@ -36,13 +36,13 @@
   <root level="WARN">
     <appender-ref ref="ASYNC_STDERR" />
   </root>
-  <logger name="com.linecorp.armeria" level="INFO">
-    <appender-ref ref="ASYNC_STDOUT" />
-    <appender-ref ref="ASYNC_STDERR" />
-  </logger>
-  <logger name="info.matsumana.kubernetes" level="DEBUG">
-    <appender-ref ref="ASYNC_STDOUT" />
-    <appender-ref ref="ASYNC_STDERR" />
-  </logger>
+  <!--  <logger name="com.linecorp.armeria" level="INFO">-->
+  <!--    <appender-ref ref="ASYNC_STDOUT" />-->
+  <!--    <appender-ref ref="ASYNC_STDERR" />-->
+  <!--  </logger>-->
+  <!--  <logger name="info.matsumana.kubernetes" level="DEBUG">-->
+  <!--    <appender-ref ref="ASYNC_STDOUT" />-->
+  <!--    <appender-ref ref="ASYNC_STDERR" />-->
+  <!--  </logger>-->
 
 </configuration>
