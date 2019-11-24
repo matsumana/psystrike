@@ -53,6 +53,6 @@ test {
 
 jar {
     manifest {
-        attributes "Main-Class": "info.matsumana.prometheus.Main"
+        attributes "Main-Class": "info.matsumana.prometheus.Application"
     }
 }

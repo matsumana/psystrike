@@ -8,8 +8,17 @@
     </encoder>
   </appender>
 
+  <!--  <root level="WARN">-->
   <root level="INFO">
     <appender-ref ref="CONSOLE" />
   </root>
+  <!--  <logger name="com.linecorp.armeria" level="WARN">-->
+  <logger name="com.linecorp.armeria" level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+  <!--  <logger name="info.matsumana.prometheus" level="INFO">-->
+  <logger name="info.matsumana.prometheus" level="DEBUG">
+    <appender-ref ref="CONSOLE" />
+  </logger>
 
 </configuration>

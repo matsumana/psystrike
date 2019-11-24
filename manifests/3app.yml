@@ -18,7 +18,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
-        prometheus.io/path: /internal/metrics
+        prometheus.io/path: /metrics
     spec:
       containers:
         - name: k8s-prometheus-reverse-proxy
@@ -53,13 +53,13 @@ spec:
               cpu: "500m"
           livenessProbe:
             httpGet:
-              path: /internal/healthcheck
+              path: /healthz
               port: 8080
             initialDelaySeconds: 60  # Need to wait until the app starts up
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /internal/healthcheck
+              path: /healthz
               port: 8080
             initialDelaySeconds: 30  # Need to wait until the app is ready
             periodSeconds: 10

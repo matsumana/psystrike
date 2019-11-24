@@ -1,8 +1,14 @@
 package info.matsumana.prometheus;
 
+import static com.linecorp.armeria.common.SessionProtocol.HTTP;
+import static com.linecorp.armeria.common.SessionProtocol.HTTPS;
+
+import java.security.cert.CertificateException;
+
+import javax.net.ssl.SSLException;
+
 import com.linecorp.armeria.common.metric.PrometheusMeterRegistries;
 import com.linecorp.armeria.server.Server;
-import com.linecorp.armeria.server.docs.DocService;
 import com.linecorp.armeria.server.healthcheck.HealthCheckService;
 import com.linecorp.armeria.server.metric.PrometheusExpositionService;
 
@@ -17,7 +23,7 @@ import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class Main {
+public final class Application {
 
     private static final int PORT = 8080;
 
@@ -52,19 +58,14 @@ public class Main {
         classLoaderMetrics.bindTo(registry);
     }
 
-    private static Server newServer() {
+    private static Server newServer() throws SSLException, CertificateException {
         return Server.builder()
-                     .http(PORT)
+                     .port(PORT, HTTP, HTTPS)  // Can serve on the same port by Protocol auto detection
+                     .tlsSelfSigned()
                      .meterRegistry(registry)
-                     .serviceUnder(internalUri("docs"), new DocService())
-                     .serviceUnder(internalUri("healthcheck"), HealthCheckService.builder().build())
-                     .service(internalUri("metrics"),
-                              new PrometheusExpositionService(registry.getPrometheusRegistry()))
+                     .serviceUnder("/healthz", HealthCheckService.builder().build())
+                     .service("/metrics", new PrometheusExpositionService(registry.getPrometheusRegistry()))
                      .annotatedService(new ReverseProxyService(registry))
                      .build();
-    }
-
-    private static String internalUri(String uri) {
-        return "/internal/" + uri;
     }
 }
