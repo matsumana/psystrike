@@ -99,7 +99,7 @@ public class ReverseProxyService {
         return handleRequest(headers, httpClient);
     }
 
-    @Get("regex:^/apiserver-metrics/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
+    @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     public CompletableFuture<HttpResponse> proxyApiServerMetrics(@Param String host,
                                                                  @Param int port,
                                                                  @Param String actualUri) {
@@ -116,7 +116,7 @@ public class ReverseProxyService {
         return handleRequest(headers, client);
     }
 
-    @Get("regex:^/pod-metrics/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
+    @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     public CompletableFuture<HttpResponse> proxyPodMetrics(@Param String host,
                                                            @Param int port,
                                                            @Param String actualUri) {
