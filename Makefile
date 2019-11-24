@@ -7,11 +7,11 @@ docker-build:
 docker-push:
 	docker push localhost:5000/k8s-proxy-prometheus:latest
 
-kubectl-create:
-	kubectl apply -f ./manifests -R
+kubectl-create-example:
+	kubectl apply -f ./example/manifests -R
 
-kubectl-delete:
-	kubectl delete -f ./manifests -R
+kubectl-delete-example:
+	kubectl delete -f ./example/manifests -R
 
 kubectl-get:
 	kubectl get namespace -o wide --all-namespaces
