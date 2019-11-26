@@ -47,25 +47,18 @@ public class ReverseProxyService {
     private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
     private static final String AUTHORIZATION_HEADER_VALUE = "Bearer";
     private static final int TIMEOUT_SECONDS_BUFFER = 10;
-    public static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
+    private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
 
     private final PrometheusMeterRegistry registry;
     private final ClientFactory clientFactory;
-    private final HttpClient httpClient;
 
     // TODO Remove unused clients
     private final Map<String, HttpClient> httpClients = new ConcurrentHashMap<>();
 
     public ReverseProxyService(PrometheusMeterRegistry registry) {
         this.registry = registry;
-        clientFactory = new ClientFactoryBuilder()
-                .meterRegistry(registry)
-                .build();
-
-        final String apiServer = System.getenv(ENV_KUBERNETES_API_SERVER) != null ?
-                                 System.getenv(ENV_KUBERNETES_API_SERVER) :
-                                 KUBERNETES_DEFAULT_API_SERVER;
-        httpClient = newH2HttpClientForApiServers(apiServer, 443);
+        clientFactory = new ClientFactoryBuilder().meterRegistry(registry)
+                                                  .build();
     }
 
     @Get("regex:^/api/(?<actualUri>.*)$")
@@ -95,6 +88,10 @@ public class ReverseProxyService {
         final RequestHeaders headers = RequestHeaders.of(GET, "/api/" + actualUri + separator + queryString,
                                                          AUTHORIZATION_HEADER_KEY,
                                                          AUTHORIZATION_HEADER_VALUE + ' ' + k8sToken);
+        final String apiServer = System.getenv(ENV_KUBERNETES_API_SERVER) != null ?
+                                 System.getenv(ENV_KUBERNETES_API_SERVER) :
+                                 KUBERNETES_DEFAULT_API_SERVER;
+        final HttpClient httpClient = newH2HttpClientForApiServers(apiServer, 443);
 
         return handleRequest(headers, httpClient);
     }
