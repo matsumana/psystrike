@@ -1,0 +1,15 @@
+server:
+  ssl:
+    enabled: true # Uses self-signed certificate because no key-store configuration is specified.
+
+armeria:
+  ports:
+    - port: 8080    # Port 8080 will serve HTTPS and HTTP protocol.
+      protocol: HTTP
+  metrics-path: /metrics
+  health-check-path: /healthz
+
+logging:
+  level:
+    io.netty.handler.codec.http2: WARN
+    info.matsumana.kubernetes: WARN
