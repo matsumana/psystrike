@@ -20,6 +20,21 @@ ADD ./docker-entrypoint.sh /root/docker-entrypoint.sh
 ENV JAVA_HOME "/root/jre"
 ENV PATH "$JAVA_HOME/bin:$PATH"
 
-CMD ["/root/docker-entrypoint.sh", "java", "-jar", "/root/app.jar"]
+ENTRYPOINT ["/root/docker-entrypoint.sh"]
+CMD ["java", \
+     "-XX:+UseG1GC", \
+     "-Djava.rmi.server.hostname=127.0.0.1", \
+     "-Dcom.sun.management.jmxremote", \
+     "-Dcom.sun.management.jmxremote.rmi.port=8686", \
+     "-Dcom.sun.management.jmxremote.port=8686", \
+     "-Dcom.sun.management.jmxremote.local.only=false", \
+     "-Dcom.sun.management.jmxremote.ssl=false", \
+     "-Dcom.sun.management.jmxremote.authenticate=false", \
+     "-Xlog:gc*=debug:/root/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-XX:StartFlightRecording=name=on_startup,filename=/root/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
+     "-Xms1g", \
+     "-Xmx1g", \
+     "-jar", \
+     "/root/app.jar"]
 
 EXPOSE 8080
