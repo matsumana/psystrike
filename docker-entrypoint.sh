@@ -6,6 +6,6 @@ set -x
 echo changeit | keytool -import -trustcacerts -file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -keystore $JAVA_HOME/lib/security/cacerts -noprompt
 
 # export token as environment variable
-export KUBERNETES_TOKEN=$(cat /run/secrets/kubernetes.io/serviceaccount/token)
+export INFO_MATSUMANA_KUBERNETES_TOKEN=$(cat /run/secrets/kubernetes.io/serviceaccount/token)
 
 exec "$@"

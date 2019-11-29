@@ -7,7 +7,7 @@ RUN apt update && \
     apt install -y -f ./bellsoft-jdk13.0.1-linux-amd64.deb
 RUN jlink \
     --compress=2 \
-    --add-modules=java.base,jdk.unsupported,java.xml,jdk.management,jdk.management.agent,jdk.jfr \
+    --add-modules=java.base,jdk.unsupported,java.xml,java.desktop,jdk.management,jdk.management.agent,jdk.jfr \
     --output=jre
 
 # --------------------------------
