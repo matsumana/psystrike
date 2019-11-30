@@ -13,15 +13,20 @@ RUN jlink \
 # --------------------------------
 FROM ubuntu:bionic-20191010
 
-COPY --from=builder /tmp/jre /root/jre
-ADD ./build/libs/*.jar /root/app.jar
-ADD ./docker-entrypoint.sh /root/docker-entrypoint.sh
+RUN mkdir /app
+COPY --from=builder /tmp/jre /app/jre
+ADD ./build/libs/*.jar /app/app.jar
+ADD ./docker-entrypoint.sh /app/docker-entrypoint.sh
 
-ENV JAVA_HOME "/root/jre"
+RUN useradd app
+RUN chown -R app:app /app
+USER app
+
+ENV JAVA_HOME "/app/jre"
 ENV PATH "$JAVA_HOME/bin:$PATH"
 
-ENTRYPOINT ["/root/docker-entrypoint.sh"]
-CMD ["java", \
+CMD ["/app/docker-entrypoint.sh", \
+     "java", \
      "-XX:+UseG1GC", \
      "-Djava.rmi.server.hostname=127.0.0.1", \
      "-Dcom.sun.management.jmxremote", \
@@ -30,11 +35,11 @@ CMD ["java", \
      "-Dcom.sun.management.jmxremote.local.only=false", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
-     "-Xlog:gc*=debug:/root/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-XX:StartFlightRecording=name=on_startup,filename=/root/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
+     "-Xlog:gc*=debug:/app/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-XX:StartFlightRecording=name=on_startup,filename=/app/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
      "-Xms1g", \
      "-Xmx1g", \
      "-jar", \
-     "/root/app.jar"]
+     "/app/app.jar"]
 
 EXPOSE 8080
