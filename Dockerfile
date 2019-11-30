@@ -14,14 +14,14 @@ RUN jlink \
 # --------------------------------
 FROM ubuntu:bionic-20191010
 
+RUN useradd app
 RUN mkdir /app
+RUN chown app:app /app
+USER app
+
 COPY --from=builder /tmp/jre /app/jre
 ADD ./build/libs/*.jar /app/app.jar
 ADD ./docker-entrypoint.sh /app/docker-entrypoint.sh
-
-RUN useradd app
-RUN chown -R app:app /app
-USER app
 
 ENV JAVA_HOME "/app/jre"
 ENV PATH "$JAVA_HOME/bin:$PATH"
