@@ -8,7 +8,8 @@ RUN apt update && \
 RUN jlink \
     --compress=2 \
     --add-modules=java.base,jdk.unsupported,java.xml,java.desktop,jdk.management,jdk.management.agent,jdk.jfr \
-    --output=jre
+    --output=jre \
+    --bind-services
 
 # --------------------------------
 FROM ubuntu:bionic-20191010
