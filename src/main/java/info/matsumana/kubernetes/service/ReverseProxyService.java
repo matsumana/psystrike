@@ -1,36 +1,47 @@
 package info.matsumana.kubernetes.service;
 
-import static info.matsumana.kubernetes.config.ArmeriaConfig.CLIENT_MAX_RESPONSE_LENGTH_BYTE;
+import static com.linecorp.armeria.common.HttpMethod.GET;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClient.Builder;
 
-import com.google.common.base.Strings;
-
+import com.linecorp.armeria.client.Client;
+import com.linecorp.armeria.client.ClientFactory;
+import com.linecorp.armeria.client.HttpClient;
+import com.linecorp.armeria.client.HttpClientBuilder;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerHttpClient;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
+import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
+import com.linecorp.armeria.client.metric.MetricCollectingClient;
+import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
 import com.linecorp.armeria.common.HttpParameters;
+import com.linecorp.armeria.common.HttpRequest;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.HttpStatus;
+import com.linecorp.armeria.common.RequestHeaders;
 import com.linecorp.armeria.common.ResponseHeaders;
 import com.linecorp.armeria.common.logging.LogLevel;
+import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.server.annotation.ProducesJson;
 import com.linecorp.armeria.server.annotation.decorator.LoggingDecorator;
 
+import hu.akarnokd.rxjava2.interop.FlowableInterop;
 import info.matsumana.kubernetes.annotation.ProducesPrometheusMetrics;
 import info.matsumana.kubernetes.config.KubernetesProperties;
 import info.matsumana.kubernetes.decorator.MetricCollectingDecorator;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -43,15 +54,22 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class ReverseProxyService {
 
+    private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
+
+    // TODO make const and link to k8s source code
+    private static final int RESPONSE_TIMEOUT_MIN = 10;
+    private static final int WRITE_TIMEOUT_MIN = 10;
+
     private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
     private static final String AUTHORIZATION_HEADER_VALUE = "Bearer";
     private static final int TIMEOUT_SECONDS_BUFFER = 10;
 
     private final KubernetesProperties kubernetesProperties;
-    private final Builder webClientBuilder;
+    private final PrometheusMeterRegistry registry;
+    private final ClientFactory clientFactory;
 
     // TODO Remove no longer used clients
-    private final Map<String, WebClient> webClients = new ConcurrentHashMap<>();
+    private final Map<String, HttpClient> httpClients = new ConcurrentHashMap<>();
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     @ProducesJson
@@ -62,73 +80,90 @@ public class ReverseProxyService {
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
         }
 
-        final MultiValueMap<String, String> queryParams =
-                StreamSupport.stream(params.spliterator(), false)
-                             .collect(LinkedMultiValueMap::new,
-                                      (map, entry) -> map.add(entry.getKey(), entry.getValue()),
-                                      MultiValueMap::addAll);
+        final String queryString = StreamSupport.stream(params.spliterator(), false)
+                                                .map(entry -> entry.getKey() + '=' + entry.getValue())
+                                                .collect(Collectors.joining("&"));
+        final String separator;
+        if (!queryString.isEmpty()) {
+            separator = "?";
+        } else {
+            separator = "";
+        }
+
+        final var requestHeaders = RequestHeaders.of(GET, "/api/" + actualUri + separator + queryString,
+                                                     AUTHORIZATION_HEADER_KEY,
+                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
+                                                     kubernetesProperties.getKubernetesToken());
+        final var client = newH2HttpClientForApiServers(kubernetesProperties.getKubernetesApiServer(),
+                                                        kubernetesProperties.getKubernetesApiServerPort());
+        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
+                                                                       .aggregate();
         final Flux<HttpData> dataStream =
-                newWebClient("h2",
-                             kubernetesProperties.getKubernetesApiServer(),
-                             kubernetesProperties.getKubernetesApiServerPort())
-                        .get()
-                        .uri(uriBuilder -> uriBuilder.path("/api/" + actualUri)
-                                                     .queryParams(queryParams)
-                                                     .build())
-                        .header(AUTHORIZATION_HEADER_KEY,
-                                AUTHORIZATION_HEADER_VALUE + ' ' + kubernetesProperties.getKubernetesToken())
-                        .retrieve()
-                        .bodyToFlux(String.class)
-                        .map(s -> Strings.isNullOrEmpty(s) ? "" : s)
-                        .map(HttpData::ofUtf8);
+                Flux.from(FlowableInterop.fromFuture(future)
+                                         .map(response -> HttpData.ofUtf8(response.contentUtf8())));
+        final var responseHeaders = ResponseHeaders.of(HttpStatus.OK);
 
         if (watch && timeoutSeconds > 0) {
-            return createResponseStream(dataStream);
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
         } else {
-            return createResponseStream(dataStream.take(1));
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
         }
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     @ProducesPrometheusMetrics
     public Mono<String> proxyApiServerMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        return newWebClient("h2", host, port)
-                .get()
-                .uri(uriBuilder -> uriBuilder.path(actualUri)
-                                             .build())
-                .header(AUTHORIZATION_HEADER_KEY,
-                        AUTHORIZATION_HEADER_VALUE + ' ' + kubernetesProperties.getKubernetesToken())
-                .retrieve()
-                .bodyToMono(String.class);
+        final RequestHeaders requestHeaders = RequestHeaders.of(GET, actualUri,
+                                                                AUTHORIZATION_HEADER_KEY,
+                                                                AUTHORIZATION_HEADER_VALUE + ' ' +
+                                                                kubernetesProperties.getKubernetesToken());
+        final HttpClient client = newH2HttpClientForApiServers(host, port);
+        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
+                                                                       .aggregate();
+
+        return Mono.fromFuture(future)
+                   .map(response -> response.contentUtf8());
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     @ProducesPrometheusMetrics
     public Mono<String> proxyPodMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        return newWebClient("h1c", host, port)
-                .get()
-                .uri(uriBuilder -> uriBuilder.path(actualUri)
-                                             .build())
-                .retrieve()
-                .bodyToMono(String.class);
+        final RequestHeaders requestHeaders = RequestHeaders.of(GET, actualUri);
+        final HttpClient client = newH1HttpClientForPods(host, port);
+        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
+                                                                       .aggregate();
+
+        return Mono.fromFuture(future)
+                   .map(response -> response.contentUtf8());
     }
 
-    private WebClient newWebClient(String scheme, String host, int port) {
-        return webClients.computeIfAbsent(host, key -> {
-            final var baseUrl = String.format("%s://%s:%d/", scheme, host, port);
-            final var strategy = ExchangeStrategies.builder()
-                                                   .codecs(configurer -> configurer
-                                                           .defaultCodecs()
-                                                           .maxInMemorySize(CLIENT_MAX_RESPONSE_LENGTH_BYTE))
-                                                   .build();
-            return webClientBuilder.baseUrl(baseUrl)
-                                   .exchangeStrategies(strategy)
-                                   .build();
-        });
+    private HttpClient newH2HttpClientForApiServers(String host, int port) {
+        return httpClients.computeIfAbsent(host, key ->
+                new HttpClientBuilder(String.format("h2://%s:%d/", host, port))
+                        .factory(clientFactory)
+                        .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
+                        .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MIN))
+                        .writeTimeout(Duration.ofMinutes(WRITE_TIMEOUT_MIN))
+                        .decorator(MetricCollectingClient.newDecorator(
+                                MeterIdPrefixFunction.ofDefault("armeria.client")
+                                                     .withTags("server", String.format("%s:%d", host, port))))
+                        .decorator(newCircuitBreakerDecorator(host))
+                        .build());
     }
 
-    private static HttpResponse createResponseStream(Flux<HttpData> dataStream) {
-        final var responseHeaders = ResponseHeaders.of(HttpStatus.OK);
-        return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
+    private HttpClient newH1HttpClientForPods(String host, int port) {
+        return httpClients.computeIfAbsent(host, key ->
+                new HttpClientBuilder(String.format("h1c://%s:%d/", host, port))
+                        .factory(clientFactory)
+                        .build());
+    }
+
+    private Function<Client<HttpRequest, HttpResponse>, CircuitBreakerHttpClient> newCircuitBreakerDecorator(
+            String hostname) {
+        return CircuitBreakerHttpClient.newDecorator(
+                CircuitBreaker.builder("kube-apiserver_" + hostname)
+                              .listener(new MetricCollectingCircuitBreakerListener(registry))
+                              .build(),
+                CircuitBreakerStrategy.onServerErrorStatus());
     }
 }

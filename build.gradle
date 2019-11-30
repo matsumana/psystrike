@@ -20,6 +20,7 @@ dependencyManagement {
         mavenBom "com.linecorp.armeria:armeria-bom:0.95.0"
     }
     dependencies {
+        dependency "com.github.akarnokd:rxjava2-jdk8-interop:0.3.7"
         dependency "com.google.guava:guava:28.1-jre"
     }
 }
@@ -27,6 +28,7 @@ dependencyManagement {
 dependencies {
     implementation "com.linecorp.armeria:armeria-spring-boot-webflux-starter"
     implementation "com.linecorp.armeria:armeria-spring-boot-actuator-starter"
+    implementation "com.github.akarnokd:rxjava2-jdk8-interop"
     implementation "com.google.guava:guava"
     implementation "io.micrometer:micrometer-registry-prometheus"
 
