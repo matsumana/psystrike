@@ -67,9 +67,10 @@ public class ReverseProxyService {
                              .collect(LinkedMultiValueMap::new,
                                       (map, entry) -> map.add(entry.getKey(), entry.getValue()),
                                       MultiValueMap::addAll);
-        final var responseHeaders = ResponseHeaders.of(HttpStatus.OK);
         final Flux<HttpData> dataStream =
-                newWebClient("h2", kubernetesProperties.getKubernetesApiServer(), 443)
+                newWebClient("h2",
+                             kubernetesProperties.getKubernetesApiServer(),
+                             kubernetesProperties.getKubernetesApiServerPort())
                         .get()
                         .uri(uriBuilder -> uriBuilder.path("/api/" + actualUri)
                                                      .queryParams(queryParams)
@@ -82,9 +83,9 @@ public class ReverseProxyService {
                         .map(HttpData::ofUtf8);
 
         if (watch & timeoutSeconds > 0) {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
+            return createResponseStream(dataStream);
         } else {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
+            return createResponseStream(dataStream.take(1));
         }
     }
 
@@ -98,8 +99,7 @@ public class ReverseProxyService {
                 .header(AUTHORIZATION_HEADER_KEY,
                         AUTHORIZATION_HEADER_VALUE + ' ' + kubernetesProperties.getKubernetesToken())
                 .retrieve()
-                .bodyToMono(String.class)
-                .map(s -> Strings.isNullOrEmpty(s) ? "" : s);
+                .bodyToMono(String.class);
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
@@ -110,8 +110,7 @@ public class ReverseProxyService {
                 .uri(uriBuilder -> uriBuilder.path(actualUri)
                                              .build())
                 .retrieve()
-                .bodyToMono(String.class)
-                .map(s -> Strings.isNullOrEmpty(s) ? "" : s);
+                .bodyToMono(String.class);
     }
 
     private WebClient newWebClient(String scheme, String host, int port) {
@@ -128,5 +127,10 @@ public class ReverseProxyService {
                                    .exchangeStrategies(strategy)
                                    .build();
         });
+    }
+
+    private static HttpResponse createResponseStream(Flux<HttpData> dataStream) {
+        final var responseHeaders = ResponseHeaders.of(HttpStatus.OK);
+        return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
     }
 }

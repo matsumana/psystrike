@@ -10,5 +10,6 @@ import lombok.Data;
 @Data
 public class KubernetesProperties {
     private String kubernetesApiServer = "kubernetes.default.svc.cluster.local";
+    private int kubernetesApiServerPort = 443;
     private String kubernetesToken;
 }
