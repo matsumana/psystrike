@@ -1,3 +1,7 @@
+management:
+  metrics:
+    web.client.request.autotime.enabled: false  # Prevent `Reached the maximum number of URI tags for 'http.client.requests'` error.
+
 server:
   ssl:
     enabled: true # Uses self-signed certificate because no key-store configuration is specified.
