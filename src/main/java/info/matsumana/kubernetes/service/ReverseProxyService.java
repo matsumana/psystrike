@@ -58,7 +58,7 @@ public class ReverseProxyService {
     public HttpResponse proxyK8sApi(ServiceRequestContext ctx, HttpParameters params, @Param String actualUri) {
         final var watch = params.getBoolean("watch", false);
         final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
-        if (watch & timeoutSeconds > 0) {
+        if (watch && timeoutSeconds > 0) {
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
         }
 
@@ -82,7 +82,7 @@ public class ReverseProxyService {
                         .map(s -> Strings.isNullOrEmpty(s) ? "" : s)
                         .map(HttpData::ofUtf8);
 
-        if (watch & timeoutSeconds > 0) {
+        if (watch && timeoutSeconds > 0) {
             return createResponseStream(dataStream);
         } else {
             return createResponseStream(dataStream.take(1));
@@ -114,15 +114,13 @@ public class ReverseProxyService {
     }
 
     private WebClient newWebClient(String scheme, String host, int port) {
-        final var strategy =
-                ExchangeStrategies.builder()
-                                  .codecs(configurer -> configurer.defaultCodecs()
-                                                                  .maxInMemorySize(
-                                                                          CLIENT_MAX_RESPONSE_LENGTH_BYTE))
-                                  .build();
-
         return webClients.computeIfAbsent(host, key -> {
             final var baseUrl = String.format("%s://%s:%d/", scheme, host, port);
+            final var strategy = ExchangeStrategies.builder()
+                                                   .codecs(configurer -> configurer
+                                                           .defaultCodecs()
+                                                           .maxInMemorySize(CLIENT_MAX_RESPONSE_LENGTH_BYTE))
+                                                   .build();
             return webClientBuilder.baseUrl(baseUrl)
                                    .exchangeStrategies(strategy)
                                    .build();
