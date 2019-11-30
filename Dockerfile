@@ -1,26 +1,37 @@
 FROM ubuntu:bionic-20191010 as builder
 
-WORKDIR /tmp
 RUN apt update && \
     apt install -y curl && \
     curl -L -O https://download.bell-sw.com/java/13.0.1/bellsoft-jdk13.0.1-linux-amd64.deb && \
     apt install -y -f ./bellsoft-jdk13.0.1-linux-amd64.deb
+
+RUN useradd app
+USER app
+
+WORKDIR /tmp
 RUN jlink \
     --compress=2 \
     --add-modules=java.base,jdk.unsupported,java.xml,java.desktop,jdk.management,jdk.management.agent,jdk.jfr \
     --output=jre \
     --bind-services
 
+ADD ./build/libs/*.jar /tmp/app.jar
+RUN jar xvf *.jar
+
+
 # --------------------------------
 FROM ubuntu:bionic-20191010
 
 RUN useradd app
-RUN mkdir /app
-RUN chown app:app /app
+RUN mkdir -p /app/log
+RUN chown -R app:app /app
 USER app
 
-COPY --from=builder /tmp/jre /app/jre
-ADD ./build/libs/*.jar /app/app.jar
+COPY --from=builder /tmp/jre              /app/jre
+COPY --from=builder /tmp/BOOT-INF/lib     /app/lib
+COPY --from=builder /tmp/META-INF         /app/META-INF
+COPY --from=builder /tmp/BOOT-INF/classes /app
+
 ADD ./docker-entrypoint.sh /app/docker-entrypoint.sh
 
 ENV JAVA_HOME "/app/jre"
@@ -36,11 +47,12 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.local.only=false", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
-     "-Xlog:gc*=debug:/app/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-XX:StartFlightRecording=name=on_startup,filename=/app/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
+     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
      "-Xms1g", \
      "-Xmx1g", \
-     "-jar", \
-     "/app/app.jar"]
+     "-cp", \
+     "/app:/app/lib/*", \
+     "info.matsumana.kubernetes.Application"]
 
 EXPOSE 8080
