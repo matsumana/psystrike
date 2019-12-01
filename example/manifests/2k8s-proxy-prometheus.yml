@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: k8s-proxy-prometheus
-          image: localhost:5000/k8s-proxy-prometheus:latest
+          image: matsumana/k8s-proxy-prometheus:latest
           ports:
             - containerPort: 8080  # Application
           resources:
