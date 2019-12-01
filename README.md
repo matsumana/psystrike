@@ -1,1 +1,9 @@
-# k8s-proxy-prometheus
+# Psystrike
+
+Kubernetes' metrics proxy for Prometheus
+
+# Docker commands
+
+```
+docker pull matsumana/psystrike:latest
+```

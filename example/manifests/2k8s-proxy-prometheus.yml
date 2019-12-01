@@ -2,27 +2,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-proxy-prometheus
+  name: psystrike
   labels:
-    app: k8s-proxy-prometheus
+    app: psystrike
   namespace: dev
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: k8s-proxy-prometheus
+      app: psystrike
   template:
     metadata:
       labels:
-        app: k8s-proxy-prometheus
+        app: psystrike
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: /metrics
     spec:
       containers:
-        - name: k8s-proxy-prometheus
-          image: matsumana/k8s-proxy-prometheus:latest
+        - name: psystrike
+          image: matsumana/psystrike:latest
           ports:
             - containerPort: 8080  # Application
           resources:
@@ -54,12 +54,12 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: k8s-proxy-prometheus
+  name: psystrike
   namespace: dev
 spec:
   type: NodePort
   selector:
-    app: k8s-proxy-prometheus
+    app: psystrike
   ports:
     - name: app
       protocol: TCP

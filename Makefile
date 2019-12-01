@@ -2,10 +2,10 @@ gradlew-clean-build:
 	./gradlew --no-daemon clean build
 
 docker-build:
-	docker build -t localhost:5000/k8s-proxy-prometheus:latest .
+	docker build -t localhost:5000/psystrike:latest .
 
 docker-push:
-	docker push localhost:5000/k8s-proxy-prometheus:latest
+	docker push localhost:5000/psystrike:latest
 
 kubectl-create-example:
 	kubectl apply -f ./example/manifests -R
