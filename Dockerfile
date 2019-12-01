@@ -39,7 +39,7 @@ ENV PATH "$JAVA_HOME/bin:$PATH"
 
 CMD ["/app/docker-entrypoint.sh", \
      "java", \
-     "-XX:+UseG1GC", \
+     \
      "-Djava.rmi.server.hostname=127.0.0.1", \
      "-Dcom.sun.management.jmxremote", \
      "-Dcom.sun.management.jmxremote.rmi.port=8686", \
@@ -47,10 +47,23 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.local.only=false", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
+     \
      "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
      "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
-     "-Xms1g", \
-     "-Xmx1g", \
+     \
+     "-XX:+ExitOnOutOfMemoryError", \
+     "-XX:+HeapDumpOnOutOfMemoryError", \
+     "-XX:HeapDumpPath=/app/log", \
+     \
+     "-XX:MaxDirectMemorySize=16m", \
+     "-XX:MaxMetaspaceSize=256m", \
+     "-XX:ReservedCodeCacheSize=240m", \
+     "-Xss1m", \
+     "-Xms400m", \
+     "-Xmx400m", \
+     \
+     "-XX:+UseG1GC", \
+     \
      "-cp", \
      "/app:/app/lib/*", \
      "info.matsumana.kubernetes.Application"]
