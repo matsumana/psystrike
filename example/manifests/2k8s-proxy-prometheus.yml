@@ -27,10 +27,10 @@ spec:
             - containerPort: 8080  # Application
           resources:
             requests:
-              memory: "1.5Gi"
+              memory: "1Gi"
               cpu: "500m"
             limits:
-              memory: "1.5Gi"
+              memory: "1Gi"
               cpu: "500m"
           livenessProbe:
             httpGet:
