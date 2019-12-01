@@ -11,6 +11,9 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import com.linecorp.armeria.client.Client;
 import com.linecorp.armeria.client.ClientFactory;
@@ -166,6 +169,15 @@ public class ReverseProxyService {
             separator = "";
         }
 
-        return kubernetesProperties.getApiUriPrefix() + "/api/" + actualUri + separator + queryString;
+        return generatePrefix(kubernetesProperties.getApiUriPrefix()) +
+               "/api/" + actualUri + separator + queryString;
+    }
+
+    @VisibleForTesting
+    static String generatePrefix(String prefix) {
+        final String s = StringUtils.trimLeadingCharacter(
+                StringUtils.trimTrailingCharacter(prefix, '/'),
+                '/');
+        return !s.isEmpty() ? '/' + s : "";
     }
 }
