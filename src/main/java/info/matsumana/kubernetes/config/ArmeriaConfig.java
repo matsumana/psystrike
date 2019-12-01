@@ -9,10 +9,8 @@ import com.linecorp.armeria.spring.ArmeriaServerConfigurator;
 
 import info.matsumana.kubernetes.service.ReverseProxyService;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
-import lombok.AllArgsConstructor;
 
 @Configuration
-@AllArgsConstructor
 public class ArmeriaConfig {
 
     @Bean
