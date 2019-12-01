@@ -6,10 +6,11 @@ import org.springframework.stereotype.Component;
 import lombok.Data;
 
 @Component
-@ConfigurationProperties(prefix = "info-matsumana")
+@ConfigurationProperties(prefix = "info-matsumana-kubernetes")
 @Data
 public class KubernetesProperties {
-    private String kubernetesApiServer = "kubernetes.default.svc.cluster.local";
-    private int kubernetesApiServerPort = 443;
-    private String kubernetesToken;
+    private String apiServer = "kubernetes.default.svc.cluster.local";
+    private int apiServerPort = 443;
+    private String apiUriPrefix = "";
+    private String bearerToken;
 }
