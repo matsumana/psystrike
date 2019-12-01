@@ -80,22 +80,13 @@ public class ReverseProxyService {
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
         }
 
-        final String queryString = StreamSupport.stream(params.spliterator(), false)
-                                                .map(entry -> entry.getKey() + '=' + entry.getValue())
-                                                .collect(Collectors.joining("&"));
-        final String separator;
-        if (!queryString.isEmpty()) {
-            separator = "?";
-        } else {
-            separator = "";
-        }
-
-        final var requestHeader = RequestHeaders.of(GET, "/api/" + actualUri + separator + queryString,
+        final String uri = createRequestUri(params, actualUri);
+        final var requestHeader = RequestHeaders.of(GET, uri,
                                                     AUTHORIZATION_HEADER_KEY,
                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                    kubernetesProperties.getKubernetesToken());
-        final var client = newH2HttpClientForApiServers(kubernetesProperties.getKubernetesApiServer(),
-                                                        kubernetesProperties.getKubernetesApiServerPort());
+                                                    kubernetesProperties.getBearerToken());
+        final var client = newH2HttpClientForApiServers(kubernetesProperties.getApiServer(),
+                                                        kubernetesProperties.getApiServerPort());
         final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeader)
                                                                                        .aggregate())
                                                                      .toFlowable(BUFFER))
@@ -115,7 +106,7 @@ public class ReverseProxyService {
         final var requestHeader = RequestHeaders.of(GET, actualUri,
                                                     AUTHORIZATION_HEADER_KEY,
                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                    kubernetesProperties.getKubernetesToken());
+                                                    kubernetesProperties.getBearerToken());
         final var client = newH2HttpClientForApiServers(host, port);
 
         return Mono.fromFuture(client.execute(requestHeader)
@@ -162,5 +153,19 @@ public class ReverseProxyService {
                               .listener(new MetricCollectingCircuitBreakerListener(registry))
                               .build(),
                 CircuitBreakerStrategy.onServerErrorStatus());
+    }
+
+    private String createRequestUri(HttpParameters params, String actualUri) {
+        final String queryString = StreamSupport.stream(params.spliterator(), false)
+                                                .map(entry -> entry.getKey() + '=' + entry.getValue())
+                                                .collect(Collectors.joining("&"));
+        final String separator;
+        if (!queryString.isEmpty()) {
+            separator = "?";
+        } else {
+            separator = "";
+        }
+
+        return kubernetesProperties.getApiUriPrefix() + "/api/" + actualUri + separator + queryString;
     }
 }
