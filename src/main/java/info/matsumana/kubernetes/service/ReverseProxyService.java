@@ -1,10 +1,10 @@
 package info.matsumana.kubernetes.service;
 
 import static com.linecorp.armeria.common.HttpMethod.GET;
+import static io.reactivex.BackpressureStrategy.BUFFER;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -21,7 +21,6 @@ import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerHttpClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
 import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
-import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
 import com.linecorp.armeria.common.HttpParameters;
 import com.linecorp.armeria.common.HttpRequest;
@@ -37,7 +36,7 @@ import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.server.annotation.ProducesJson;
 import com.linecorp.armeria.server.annotation.decorator.LoggingDecorator;
 
-import hu.akarnokd.rxjava2.interop.FlowableInterop;
+import hu.akarnokd.rxjava2.interop.ObservableInterop;
 import info.matsumana.kubernetes.annotation.ProducesPrometheusMetrics;
 import info.matsumana.kubernetes.config.KubernetesProperties;
 import info.matsumana.kubernetes.decorator.MetricCollectingDecorator;
@@ -73,7 +72,8 @@ public class ReverseProxyService {
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     @ProducesJson
-    public HttpResponse proxyK8sApi(ServiceRequestContext ctx, HttpParameters params, @Param String actualUri) {
+    public HttpResponse proxyApiServer(ServiceRequestContext ctx, HttpParameters params,
+                                       @Param String actualUri) {
         final var watch = params.getBoolean("watch", false);
         final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
         if (watch && timeoutSeconds > 0) {
@@ -90,50 +90,47 @@ public class ReverseProxyService {
             separator = "";
         }
 
-        final var requestHeaders = RequestHeaders.of(GET, "/api/" + actualUri + separator + queryString,
-                                                     AUTHORIZATION_HEADER_KEY,
-                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                     kubernetesProperties.getKubernetesToken());
+        final var requestHeader = RequestHeaders.of(GET, "/api/" + actualUri + separator + queryString,
+                                                    AUTHORIZATION_HEADER_KEY,
+                                                    AUTHORIZATION_HEADER_VALUE + ' ' +
+                                                    kubernetesProperties.getKubernetesToken());
         final var client = newH2HttpClientForApiServers(kubernetesProperties.getKubernetesApiServer(),
                                                         kubernetesProperties.getKubernetesApiServerPort());
-        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
-                                                                       .aggregate();
-        final Flux<HttpData> dataStream =
-                Flux.from(FlowableInterop.fromFuture(future)
-                                         .map(response -> HttpData.ofUtf8(response.contentUtf8())));
-        final var responseHeaders = ResponseHeaders.of(HttpStatus.OK);
+        final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeader)
+                                                                                       .aggregate())
+                                                                     .toFlowable(BUFFER))
+                                              .map(response -> HttpData.ofUtf8(response.contentUtf8()));
+        final var responseHeader = ResponseHeaders.of(HttpStatus.OK);
 
         if (watch && timeoutSeconds > 0) {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream));
         } else {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream.take(1)));
         }
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     @ProducesPrometheusMetrics
     public Mono<String> proxyApiServerMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        final RequestHeaders requestHeaders = RequestHeaders.of(GET, actualUri,
-                                                                AUTHORIZATION_HEADER_KEY,
-                                                                AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                                kubernetesProperties.getKubernetesToken());
-        final HttpClient client = newH2HttpClientForApiServers(host, port);
-        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
-                                                                       .aggregate();
+        final var requestHeader = RequestHeaders.of(GET, actualUri,
+                                                    AUTHORIZATION_HEADER_KEY,
+                                                    AUTHORIZATION_HEADER_VALUE + ' ' +
+                                                    kubernetesProperties.getKubernetesToken());
+        final var client = newH2HttpClientForApiServers(host, port);
 
-        return Mono.fromFuture(future)
+        return Mono.fromFuture(client.execute(requestHeader)
+                                     .aggregate())
                    .map(response -> response.contentUtf8());
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
     @ProducesPrometheusMetrics
     public Mono<String> proxyPodMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        final RequestHeaders requestHeaders = RequestHeaders.of(GET, actualUri);
-        final HttpClient client = newH1HttpClientForPods(host, port);
-        final CompletableFuture<AggregatedHttpResponse> future = client.execute(requestHeaders)
-                                                                       .aggregate();
+        final var requestHeader = RequestHeaders.of(GET, actualUri);
+        final var client = newH1HttpClientForPods(host, port);
 
-        return Mono.fromFuture(future)
+        return Mono.fromFuture(client.execute(requestHeader)
+                                     .aggregate())
                    .map(response -> response.contentUtf8());
     }
 
