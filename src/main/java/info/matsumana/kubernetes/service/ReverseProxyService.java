@@ -144,6 +144,7 @@ public class ReverseProxyService {
         return httpClients.computeIfAbsent(host, key ->
                 new HttpClientBuilder(String.format("h1c://%s:%d/", host, port))
                         .factory(clientFactory)
+                        .decorator(newCircuitBreakerDecoratorWithoutMetrics())
                         .build());
     }
 
@@ -154,6 +155,11 @@ public class ReverseProxyService {
                               .listener(new MetricCollectingCircuitBreakerListener(registry))
                               .build(),
                 CircuitBreakerStrategy.onServerErrorStatus());
+    }
+
+    private static Function<Client<HttpRequest, HttpResponse>, CircuitBreakerHttpClient> newCircuitBreakerDecoratorWithoutMetrics() {
+        final CircuitBreakerStrategy strategy = CircuitBreakerStrategy.onServerErrorStatus();
+        return CircuitBreakerHttpClient.builder(strategy).newDecorator();
     }
 
     private String createRequestUri(HttpParameters params, String actualUri) {
