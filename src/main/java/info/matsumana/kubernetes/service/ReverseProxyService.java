@@ -64,7 +64,6 @@ public class ReverseProxyService {
 
     private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
     private static final String AUTHORIZATION_HEADER_VALUE = "Bearer";
-    private static final int TIMEOUT_SECONDS_BUFFER = 10;
 
     private final KubernetesProperties kubernetesProperties;
     private final PrometheusMeterRegistry registry;
@@ -77,12 +76,6 @@ public class ReverseProxyService {
     @ProducesJson
     public HttpResponse proxyApiServer(ServiceRequestContext ctx, HttpParameters params,
                                        @Param String actualUri) {
-        final var watch = params.getBoolean("watch", false);
-        final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
-        if (watch && timeoutSeconds > 0) {
-            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
-        }
-
         final String uri = createRequestUri(params, actualUri);
         final var requestHeader = RequestHeaders.of(GET, uri,
                                                     AUTHORIZATION_HEADER_KEY,
@@ -96,7 +89,11 @@ public class ReverseProxyService {
                                               .map(response -> HttpData.ofUtf8(response.contentUtf8()));
         final var responseHeader = ResponseHeaders.of(HttpStatus.OK);
 
+        final var watch = params.getBoolean("watch", false);
+        final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
+
         if (watch && timeoutSeconds > 0) {
+            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds));
             return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream));
         } else {
             return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream.take(1)));
