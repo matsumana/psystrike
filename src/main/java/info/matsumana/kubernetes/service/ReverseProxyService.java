@@ -14,12 +14,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 
 import com.linecorp.armeria.client.Client;
 import com.linecorp.armeria.client.ClientFactory;
 import com.linecorp.armeria.client.HttpClient;
 import com.linecorp.armeria.client.HttpClientBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerHttpClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
 import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
@@ -77,7 +79,7 @@ public class ReverseProxyService {
     @ProducesJson
     public HttpResponse proxyApiServer(ServiceRequestContext ctx, HttpParameters params,
                                        @Param String actualUri) {
-        final String uri = createRequestUri(params, actualUri);
+        final String uri = generateRequestUri(params, actualUri);
         final var requestHeader = RequestHeaders.of(GET, uri,
                                                     AUTHORIZATION_HEADER_KEY,
                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
@@ -144,19 +146,32 @@ public class ReverseProxyService {
         return httpClients.computeIfAbsent(host, key ->
                 new HttpClientBuilder(String.format("h1c://%s:%d/", host, port))
                         .factory(clientFactory)
+                        .decorator(newCircuitBreakerDecorator(""))
                         .build());
     }
 
     private Function<Client<HttpRequest, HttpResponse>, CircuitBreakerHttpClient> newCircuitBreakerDecorator(
             String hostname) {
-        return CircuitBreakerHttpClient.newDecorator(
-                CircuitBreaker.builder("kube-apiserver_" + hostname)
-                              .listener(new MetricCollectingCircuitBreakerListener(registry))
-                              .build(),
-                CircuitBreakerStrategy.onServerErrorStatus());
+        final CircuitBreakerBuilder builder;
+        if (Strings.isNullOrEmpty(hostname)) {
+            builder = CircuitBreaker.builder();
+        } else {
+            // with metrics
+            builder = CircuitBreaker.builder("kube-apiserver_" + hostname)
+                                    .listener(new MetricCollectingCircuitBreakerListener(registry));
+        }
+        final CircuitBreaker circuitBreaker = builder.failureRateThreshold(0.1)
+                                                     .minimumRequestThreshold(1)
+                                                     .trialRequestInterval(Duration.ofSeconds(5))
+                                                     .circuitOpenWindow(Duration.ofSeconds(10))
+                                                     .counterSlidingWindow(Duration.ofSeconds(60))
+                                                     .build();
+
+        return CircuitBreakerHttpClient.newDecorator(circuitBreaker,
+                                                     CircuitBreakerStrategy.onServerErrorStatus());
     }
 
-    private String createRequestUri(HttpParameters params, String actualUri) {
+    private String generateRequestUri(HttpParameters params, String actualUri) {
         final String queryString = StreamSupport.stream(params.spliterator(), false)
                                                 .map(entry -> entry.getKey() + '=' + entry.getValue())
                                                 .collect(Collectors.joining("&"));
