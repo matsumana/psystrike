@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import lombok.Data;
 
 @Component
-@ConfigurationProperties(prefix = "info-matsumana-kubernetes")
+@ConfigurationProperties(prefix = "psystrike-kubernetes")
 @Data
 public class KubernetesProperties {
     private String apiServer = "kubernetes.default.svc.cluster.local";
