@@ -1,6 +1,9 @@
 package info.matsumana.kubernetes.service;
 
 import static com.linecorp.armeria.common.HttpMethod.GET;
+import static com.linecorp.armeria.common.HttpStatus.OK;
+import static com.linecorp.armeria.common.SessionProtocol.H1C;
+import static com.linecorp.armeria.common.SessionProtocol.H2;
 import static io.reactivex.BackpressureStrategy.BUFFER;
 
 import java.time.Duration;
@@ -30,7 +33,6 @@ import com.linecorp.armeria.common.HttpData;
 import com.linecorp.armeria.common.HttpParameters;
 import com.linecorp.armeria.common.HttpRequest;
 import com.linecorp.armeria.common.HttpResponse;
-import com.linecorp.armeria.common.HttpStatus;
 import com.linecorp.armeria.common.RequestHeaders;
 import com.linecorp.armeria.common.ResponseHeaders;
 import com.linecorp.armeria.common.logging.LogLevel;
@@ -90,7 +92,7 @@ public class ReverseProxyService {
                                                                                        .aggregate())
                                                                      .toFlowable(BUFFER))
                                               .map(response -> HttpData.ofUtf8(response.contentUtf8()));
-        final var responseHeader = ResponseHeaders.of(HttpStatus.OK);
+        final var responseHeader = ResponseHeaders.of(OK);
 
         final var watch = params.getBoolean("watch", false);
         final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
@@ -130,7 +132,8 @@ public class ReverseProxyService {
 
     private HttpClient newH2HttpClientForApiServers(String host, int port) {
         return httpClients.computeIfAbsent(host, key ->
-                new HttpClientBuilder(String.format("h2://%s:%d/", host, port))
+                // TODO get scheme via URI
+                new HttpClientBuilder(String.format("%s://%s:%d/", H2.uriText(), host, port))
                         .factory(clientFactory)
                         .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
                         .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MIN))
@@ -144,7 +147,8 @@ public class ReverseProxyService {
 
     private HttpClient newH1HttpClientForPods(String host, int port) {
         return httpClients.computeIfAbsent(host, key ->
-                new HttpClientBuilder(String.format("h1c://%s:%d/", host, port))
+                // TODO get scheme via URI
+                new HttpClientBuilder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
                         .factory(clientFactory)
                         .decorator(newCircuitBreakerDecorator(""))
                         .build());
