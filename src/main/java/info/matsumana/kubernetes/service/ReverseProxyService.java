@@ -60,15 +60,16 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class ReverseProxyService {
 
-    private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
-
-    // TODO make const and link to k8s source code
-    private static final int RESPONSE_TIMEOUT_MIN = 10;
-    private static final int WRITE_TIMEOUT_MIN = 10;
-
     private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
     private static final String AUTHORIZATION_HEADER_VALUE = "Bearer";
+    private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
     private static final int TIMEOUT_SECONDS_BUFFER = 10;
+
+    // In Prometheus, watch time is random in [minWatchTimeout, 2*minWatchTimeout]
+    // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
+    // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
+    private static final int RESPONSE_TIMEOUT_MIN = 10;
+    private static final int WRITE_TIMEOUT_MIN = 10;
 
     private final KubernetesProperties kubernetesProperties;
     private final PrometheusMeterRegistry registry;
