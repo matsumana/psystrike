@@ -4,7 +4,7 @@ plugins {
     id "io.spring.dependency-management" version "1.0.8.RELEASE"
 }
 
-group = "info.matsumana.kubernetes"
+group = "info.matsumana.psystrike"
 version = "0.4.1-SNAPSHOT"
 
 sourceCompatibility = JavaVersion.VERSION_13

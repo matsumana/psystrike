@@ -1,4 +1,4 @@
-package info.matsumana.kubernetes.config;
+package info.matsumana.psystrike.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -6,9 +6,10 @@ import org.springframework.context.annotation.Configuration;
 import com.linecorp.armeria.client.ClientFactory;
 import com.linecorp.armeria.client.ClientFactoryBuilder;
 import com.linecorp.armeria.common.metric.PrometheusMeterRegistries;
+import com.linecorp.armeria.server.logging.AccessLogWriter;
 import com.linecorp.armeria.spring.ArmeriaServerConfigurator;
 
-import info.matsumana.kubernetes.service.ReverseProxyService;
+import info.matsumana.psystrike.service.ReverseProxyService;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 
 @Configuration
@@ -22,7 +23,8 @@ public class ArmeriaConfig {
 
     @Bean
     public ArmeriaServerConfigurator armeriaServerConfigurator(ReverseProxyService reverseProxyService) {
-        return builder -> builder.annotatedService(reverseProxyService);
+        return builder -> builder.annotatedService(reverseProxyService)
+                                 .accessLogWriter(AccessLogWriter.combined(), false);
     }
 
     @Bean

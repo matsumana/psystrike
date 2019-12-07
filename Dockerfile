@@ -66,6 +66,6 @@ CMD ["/app/docker-entrypoint.sh", \
      \
      "-cp", \
      "/app:/app/lib/*", \
-     "info.matsumana.kubernetes.Application"]
+     "info.matsumana.psystrike.Application"]
 
 EXPOSE 8080

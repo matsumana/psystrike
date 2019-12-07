@@ -1,4 +1,4 @@
-package info.matsumana.kubernetes.decorator;
+package info.matsumana.psystrike.decorator;
 
 import java.util.function.Function;
 
