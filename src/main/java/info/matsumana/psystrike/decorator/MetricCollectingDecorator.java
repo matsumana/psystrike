@@ -1,4 +1,4 @@
-package info.matsumana.kubernetes.decorator;
+package info.matsumana.psystrike.decorator;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

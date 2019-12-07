@@ -1,4 +1,4 @@
-package info.matsumana.kubernetes.service;
+package info.matsumana.psystrike.service;
 
 import static com.linecorp.armeria.common.HttpMethod.GET;
 import static com.linecorp.armeria.common.HttpStatus.OK;
@@ -44,9 +44,9 @@ import com.linecorp.armeria.server.annotation.ProducesJson;
 import com.linecorp.armeria.server.annotation.decorator.LoggingDecorator;
 
 import hu.akarnokd.rxjava2.interop.ObservableInterop;
-import info.matsumana.kubernetes.annotation.ProducesPrometheusMetrics;
-import info.matsumana.kubernetes.config.KubernetesProperties;
-import info.matsumana.kubernetes.decorator.MetricCollectingDecorator;
+import info.matsumana.psystrike.annotation.ProducesPrometheusMetrics;
+import info.matsumana.psystrike.config.KubernetesProperties;
+import info.matsumana.psystrike.decorator.MetricCollectingDecorator;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

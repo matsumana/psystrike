@@ -1,10 +1,10 @@
 management:
-  metrics:
-    web.client.request.autotime.enabled: false  # Prevent `Reached the maximum number of URI tags for 'http.client.requests'` error.
+  endpoints:
+    enabled-by-default: false   # Disable all of Actuator's endpoints
 
 server:
   ssl:
-    enabled: true # Uses self-signed certificate because no key-store configuration is specified.
+    enabled: true   # Uses self-signed certificate because no key-store configuration is specified.
 
 armeria:
   ports:
@@ -16,4 +16,5 @@ armeria:
 logging:
   level:
     io.netty.handler.codec.http2: WARN
-    info.matsumana.kubernetes: WARN
+    com.linecorp.armeria.logging.access: WARN   # for com.linecorp.armeria.server.logging.AccessLogWriter
+    info.matsumana.psystrike: WARN
