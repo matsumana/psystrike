@@ -5,7 +5,6 @@ metadata:
   name: psystrike
   labels:
     app: psystrike
-  namespace: dev
 spec:
   replicas: 1
   selector:
@@ -55,7 +54,6 @@ kind: Service
 apiVersion: v1
 metadata:
   name: psystrike
-  namespace: dev
 spec:
   type: NodePort
   selector:
