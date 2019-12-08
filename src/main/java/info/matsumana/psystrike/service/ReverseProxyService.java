@@ -19,10 +19,9 @@ import org.springframework.util.StringUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
-import com.linecorp.armeria.client.Client;
 import com.linecorp.armeria.client.ClientFactory;
 import com.linecorp.armeria.client.HttpClient;
-import com.linecorp.armeria.client.HttpClientBuilder;
+import com.linecorp.armeria.client.WebClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerHttpClient;
@@ -31,7 +30,6 @@ import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreaker
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.HttpData;
 import com.linecorp.armeria.common.HttpParameters;
-import com.linecorp.armeria.common.HttpRequest;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.RequestHeaders;
 import com.linecorp.armeria.common.ResponseHeaders;
@@ -65,7 +63,7 @@ public class ReverseProxyService {
     private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
     private static final int TIMEOUT_SECONDS_BUFFER = 10;
 
-    // In Prometheus, watch time is random in [minWatchTimeout, 2*minWatchTimeout]
+    // In Prometheus, watch timeout is random in [minWatchTimeout, 2*minWatchTimeout]
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
     private static final int RESPONSE_TIMEOUT_MIN = 10;
@@ -76,7 +74,7 @@ public class ReverseProxyService {
     private final ClientFactory clientFactory;
 
     // TODO Remove no longer used clients
-    private final Map<String, HttpClient> httpClients = new ConcurrentHashMap<>();
+    private final Map<String, WebClient> webClients = new ConcurrentHashMap<>();
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     @ProducesJson
@@ -87,8 +85,8 @@ public class ReverseProxyService {
                                                     AUTHORIZATION_HEADER_KEY,
                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
                                                     kubernetesProperties.getBearerToken());
-        final var client = newH2HttpClientForApiServers(kubernetesProperties.getApiServer(),
-                                                        kubernetesProperties.getApiServerPort());
+        final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
+                                                       kubernetesProperties.getApiServerPort());
         final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeader)
                                                                                        .aggregate())
                                                                      .toFlowable(BUFFER))
@@ -113,7 +111,7 @@ public class ReverseProxyService {
                                                     AUTHORIZATION_HEADER_KEY,
                                                     AUTHORIZATION_HEADER_VALUE + ' ' +
                                                     kubernetesProperties.getBearerToken());
-        final var client = newH2HttpClientForApiServers(host, port);
+        final var client = newH2WebClientForApiServers(host, port);
 
         return Mono.fromFuture(client.execute(requestHeader)
                                      .aggregate())
@@ -124,38 +122,38 @@ public class ReverseProxyService {
     @ProducesPrometheusMetrics
     public Mono<String> proxyPodMetrics(@Param String host, @Param int port, @Param String actualUri) {
         final var requestHeader = RequestHeaders.of(GET, actualUri);
-        final var client = newH1HttpClientForPods(host, port);
+        final var client = newH1WebClientForPods(host, port);
 
         return Mono.fromFuture(client.execute(requestHeader)
                                      .aggregate())
                    .map(response -> response.contentUtf8());
     }
 
-    private HttpClient newH2HttpClientForApiServers(String host, int port) {
-        return httpClients.computeIfAbsent(host, key ->
+    private WebClient newH2WebClientForApiServers(String host, int port) {
+        return webClients.computeIfAbsent(host, key ->
                 // TODO get scheme via URI
-                new HttpClientBuilder(String.format("%s://%s:%d/", H2.uriText(), host, port))
-                        .factory(clientFactory)
-                        .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
-                        .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MIN))
-                        .writeTimeout(Duration.ofMinutes(WRITE_TIMEOUT_MIN))
-                        .decorator(MetricCollectingClient.newDecorator(
-                                MeterIdPrefixFunction.ofDefault("armeria.client")
-                                                     .withTags("server", String.format("%s:%d", host, port))))
-                        .decorator(newCircuitBreakerDecorator(host))
-                        .build());
+                WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
+                         .factory(clientFactory)
+                         .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
+                         .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MIN))
+                         .writeTimeout(Duration.ofMinutes(WRITE_TIMEOUT_MIN))
+                         .decorator(MetricCollectingClient.newDecorator(
+                                 MeterIdPrefixFunction.ofDefault("armeria.client")
+                                                      .withTags("server", String.format("%s:%d", host, port))))
+                         .decorator(newCircuitBreakerDecorator(host))
+                         .build());
     }
 
-    private HttpClient newH1HttpClientForPods(String host, int port) {
-        return httpClients.computeIfAbsent(host, key ->
+    private WebClient newH1WebClientForPods(String host, int port) {
+        return webClients.computeIfAbsent(host, key ->
                 // TODO get scheme via URI
-                new HttpClientBuilder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
-                        .factory(clientFactory)
-                        .decorator(newCircuitBreakerDecorator(""))
-                        .build());
+                WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
+                         .factory(clientFactory)
+                         .decorator(newCircuitBreakerDecorator(""))
+                         .build());
     }
 
-    private Function<Client<HttpRequest, HttpResponse>, CircuitBreakerHttpClient> newCircuitBreakerDecorator(
+    private Function<? super HttpClient, CircuitBreakerHttpClient> newCircuitBreakerDecorator(
             String hostname) {
         final CircuitBreakerBuilder builder;
         if (Strings.isNullOrEmpty(hostname)) {

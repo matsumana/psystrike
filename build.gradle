@@ -1,6 +1,6 @@
 plugins {
     id "java"
-    id "org.springframework.boot" version "2.2.1.RELEASE"
+    id "org.springframework.boot" version "2.2.2.RELEASE"
     id "io.spring.dependency-management" version "1.0.8.RELEASE"
 }
 
@@ -17,7 +17,7 @@ repositories {
 
 dependencyManagement {
     imports {
-        mavenBom "com.linecorp.armeria:armeria-bom:0.95.0"
+        mavenBom "com.linecorp.armeria:armeria-bom:0.97.0"
     }
     dependencies {
         dependency "com.github.akarnokd:rxjava2-jdk8-interop:0.3.7"
@@ -26,6 +26,7 @@ dependencyManagement {
 }
 
 dependencies {
+    implementation "com.linecorp.armeria:armeria"
     implementation "com.linecorp.armeria:armeria-spring-boot-webflux-starter"
     implementation "com.linecorp.armeria:armeria-spring-boot-actuator-starter"
     implementation "com.github.akarnokd:rxjava2-jdk8-interop"
