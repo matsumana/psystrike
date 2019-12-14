@@ -33,18 +33,15 @@ import com.linecorp.armeria.common.HttpParameters;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.RequestHeaders;
 import com.linecorp.armeria.common.ResponseHeaders;
-import com.linecorp.armeria.common.logging.LogLevel;
 import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.server.annotation.ProducesJson;
-import com.linecorp.armeria.server.annotation.decorator.LoggingDecorator;
 
 import hu.akarnokd.rxjava2.interop.ObservableInterop;
 import info.matsumana.psystrike.annotation.ProducesPrometheusMetrics;
 import info.matsumana.psystrike.config.KubernetesProperties;
-import info.matsumana.psystrike.decorator.MetricCollectingDecorator;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,8 +49,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
-@LoggingDecorator(requestLogLevel = LogLevel.DEBUG)
-@MetricCollectingDecorator
 @AllArgsConstructor
 @Slf4j
 public class ReverseProxyService {
