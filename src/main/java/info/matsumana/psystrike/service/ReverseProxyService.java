@@ -61,8 +61,8 @@ public class ReverseProxyService {
     // In Prometheus, watch timeout is random in [minWatchTimeout, 2*minWatchTimeout]
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
-    private static final int RESPONSE_TIMEOUT_MIN = 10;
-    private static final int WRITE_TIMEOUT_MIN = 10;
+    private static final int RESPONSE_TIMEOUT_MINUTES = 10;
+    private static final int WRITE_TIMEOUT_MINUTES = 10;
 
     private final KubernetesProperties kubernetesProperties;
     private final PrometheusMeterRegistry registry;
@@ -125,13 +125,13 @@ public class ReverseProxyService {
     }
 
     private WebClient newH2WebClientForApiServers(String host, int port) {
-        return webClients.computeIfAbsent(host, key ->
+        return webClients.computeIfAbsent(host + ':' + port, key ->
                 // TODO get scheme via URI
                 WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
                          .factory(clientFactory)
                          .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
-                         .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MIN))
-                         .writeTimeout(Duration.ofMinutes(WRITE_TIMEOUT_MIN))
+                         .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MINUTES))
+                         .writeTimeout(Duration.ofMinutes(WRITE_TIMEOUT_MINUTES))
                          .decorator(MetricCollectingClient.newDecorator(
                                  MeterIdPrefixFunction.ofDefault("armeria.client")
                                                       .withTags("server", String.format("%s:%d", host, port))))
@@ -140,7 +140,7 @@ public class ReverseProxyService {
     }
 
     private WebClient newH1WebClientForPods(String host, int port) {
-        return webClients.computeIfAbsent(host, key ->
+        return webClients.computeIfAbsent(host + ':' + port, key ->
                 // TODO get scheme via URI
                 WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
                          .factory(clientFactory)
