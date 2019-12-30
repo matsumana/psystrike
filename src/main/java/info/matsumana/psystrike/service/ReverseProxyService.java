@@ -1,10 +1,10 @@
 package info.matsumana.psystrike.service;
 
-import static com.linecorp.armeria.common.HttpMethod.GET;
 import static com.linecorp.armeria.common.HttpStatus.OK;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
 import static io.reactivex.BackpressureStrategy.BUFFER;
+import static java.util.Objects.requireNonNull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -37,10 +37,8 @@ import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
-import com.linecorp.armeria.server.annotation.ProducesJson;
 
 import hu.akarnokd.rxjava2.interop.ObservableInterop;
-import info.matsumana.psystrike.annotation.ProducesPrometheusMetrics;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import lombok.AllArgsConstructor;
@@ -53,14 +51,16 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class ReverseProxyService {
 
-    private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
-    private static final String AUTHORIZATION_HEADER_VALUE = "Bearer";
+    private static final String HTTP_HEADER_ACCEPT_ENCODING = "accept-encoding";
+    private static final String HTTP_HEADER_AUTHORIZATION_KEY = "Authorization";
+    private static final String HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX = "Bearer ";
     private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
-    private static final int TIMEOUT_SECONDS_BUFFER = 10;
+    private static final int TIMEOUT_BUFFER_SECONDS = 1;
 
     // In Prometheus, watch timeout is random in [minWatchTimeout, 2*minWatchTimeout]
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
+    public static final int CLIENT_IDLE_TIMEOUT_MINUTES = 10;
     private static final int RESPONSE_TIMEOUT_MINUTES = 10;
     private static final int WRITE_TIMEOUT_MINUTES = 10;
 
@@ -72,55 +72,94 @@ public class ReverseProxyService {
     private final Map<String, WebClient> webClients = new ConcurrentHashMap<>();
 
     @Get("regex:^/api/(?<actualUri>.*)$")
-    @ProducesJson
-    public HttpResponse proxyApiServer(ServiceRequestContext ctx, HttpParameters params,
+    public HttpResponse proxyApiServer(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                       HttpParameters params,
                                        @Param String actualUri) {
-        final String uri = generateRequestUri(params, actualUri);
-        final var requestHeader = RequestHeaders.of(GET, uri,
-                                                    AUTHORIZATION_HEADER_KEY,
-                                                    AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                    kubernetesProperties.getBearerToken());
-        final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
-                                                       kubernetesProperties.getApiServerPort());
-        final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeader)
-                                                                                       .aggregate())
-                                                                     .toFlowable(BUFFER))
-                                              .map(response -> HttpData.ofUtf8(response.contentUtf8()));
-        final var responseHeader = ResponseHeaders.of(OK);
+
+        log.debug("proxyApiServer orgRequestHeaders={}", orgRequestHeaders);
 
         final var watch = params.getBoolean("watch", false);
         final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
+        final String uri = generateRequestUri(params, actualUri);
+
+        // create new headers with auth token
+        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
+                                                 .toBuilder()
+                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
+                                                 .add(HTTP_HEADER_AUTHORIZATION_KEY,
+                                                      HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX +
+                                                      kubernetesProperties.getBearerToken())
+                                                 .scheme(H2)
+                                                 .path(uri)
+                                                 .build();
+        final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
+                                                       kubernetesProperties.getApiServerPort());
+        final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeaders)
+                                                                                       .aggregate())
+                                                                     .toFlowable(BUFFER))
+                                              .doOnEach(response -> {
+                                                  final var responseHeaders = requireNonNull(response.get())
+                                                          .headers();
+                                                  ctx.addAdditionalResponseHeaders(responseHeaders);
+                                              })
+                                              .map(response -> {
+                                                  if (watch && timeoutSeconds > 0) {
+                                                      log.debug("watched response={}", response.contentUtf8());
+                                                  }
+
+                                                  return HttpData.ofUtf8(response.contentUtf8());
+                                              });
+        final var responseHeaders = ResponseHeaders.of(OK);
 
         if (watch && timeoutSeconds > 0) {
-            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream));
+            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
         } else {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream.take(1)));
+            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
         }
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    @ProducesPrometheusMetrics
-    public Mono<String> proxyApiServerMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        final var requestHeader = RequestHeaders.of(GET, actualUri,
-                                                    AUTHORIZATION_HEADER_KEY,
-                                                    AUTHORIZATION_HEADER_VALUE + ' ' +
-                                                    kubernetesProperties.getBearerToken());
+    public Mono<String> proxyApiServerMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                              @Param String host, @Param int port, @Param String actualUri) {
+
+        log.debug("proxyApiServerMetrics orgRequestHeaders={}", orgRequestHeaders);
+
+        // create new headers with auth token
+        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
+                                                 .toBuilder()
+                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
+                                                 .add(HTTP_HEADER_AUTHORIZATION_KEY,
+                                                      HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX +
+                                                      kubernetesProperties.getBearerToken())
+                                                 .scheme(H2)
+                                                 .path(actualUri)
+                                                 .build();
         final var client = newH2WebClientForApiServers(host, port);
 
-        return Mono.fromFuture(client.execute(requestHeader)
+        return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
+                   .doOnSuccess(response -> ctx.addAdditionalResponseHeaders(response.headers()))
                    .map(response -> response.contentUtf8());
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    @ProducesPrometheusMetrics
-    public Mono<String> proxyPodMetrics(@Param String host, @Param int port, @Param String actualUri) {
-        final var requestHeader = RequestHeaders.of(GET, actualUri);
+    public Mono<String> proxyPodMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                        @Param String host, @Param int port, @Param String actualUri) {
+
+        log.debug("proxyPodMetrics orgRequestHeaders={}", orgRequestHeaders);
+
+        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
+                                                 .toBuilder()
+                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
+                                                 .scheme(H1C)
+                                                 .path(actualUri)
+                                                 .build();
         final var client = newH1WebClientForPods(host, port);
 
-        return Mono.fromFuture(client.execute(requestHeader)
+        return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
+                   .doOnSuccess(response -> ctx.addAdditionalResponseHeaders(response.headers()))
                    .map(response -> response.contentUtf8());
     }
 
