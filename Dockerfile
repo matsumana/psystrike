@@ -48,9 +48,9 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
      \
-     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-Xlog:vmoperation=debug:/app/log/vmoperation_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-Xlog:class+load=debug,class+unload=debug:/app/log/class_load_unload_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:safepoint=debug:/app/log/safepoint_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:class+unload=debug:/app/log/class_unload_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
      "-XX:ErrorFile=/app/log/hs_err_pid%p.log", \
      \
      "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=1024m", \
