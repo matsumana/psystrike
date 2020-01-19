@@ -49,9 +49,14 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
      \
      "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
+     "-Xlog:vmoperation=debug:/app/log/vmoperation_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:class+load=debug,class+unload=debug:/app/log/class_load_unload_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
+     "-XX:ErrorFile=/app/log/hs_err_pid%p.log", \
+     \
+     "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=1024m", \
      \
      "-XX:+ExitOnOutOfMemoryError", \
+     \
      "-XX:+HeapDumpOnOutOfMemoryError", \
      "-XX:HeapDumpPath=/app/log", \
      \
