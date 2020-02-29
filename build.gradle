@@ -17,7 +17,7 @@ repositories {
 
 dependencyManagement {
     imports {
-        mavenBom 'com.linecorp.armeria:armeria-bom:0.97.0'
+        mavenBom 'com.linecorp.armeria:armeria-bom:0.98.3'
     }
     dependencies {
         dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
