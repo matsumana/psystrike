@@ -55,7 +55,7 @@ public class ReverseProxyService {
     private static final String HTTP_HEADER_AUTHORIZATION_KEY = "Authorization";
     private static final String HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX = "Bearer ";
     private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
-    private static final int TIMEOUT_BUFFER_SECONDS = 1;
+    private static final int TIMEOUT_BUFFER_SECONDS = 3;
 
     // In Prometheus, watch timeout is random in [minWatchTimeout, 2*minWatchTimeout]
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
@@ -95,18 +95,17 @@ public class ReverseProxyService {
         final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeaders)
                                                                                        .aggregate())
                                                                      .toFlowable(BUFFER))
-                                              .doOnEach(response -> {
-                                                  final var responseHeaders = requireNonNull(response.get())
-                                                          .headers();
-                                                  ctx.addAdditionalResponseHeaders(responseHeaders);
-                                              })
-                                              .map(response -> {
+                                              .doOnEach(wrappedResponse -> {
+                                                  final var response = requireNonNull(wrappedResponse.get());
+
                                                   if (watch && timeoutSeconds > 0) {
                                                       log.debug("watched response={}", response.contentUtf8());
                                                   }
 
-                                                  return HttpData.ofUtf8(response.contentUtf8());
-                                              });
+                                                  final var responseHeaders = response.headers();
+                                                  ctx.setAdditionalResponseHeaders(responseHeaders);
+                                              })
+                                              .map(response -> HttpData.ofUtf8(response.contentUtf8()));
         final var responseHeaders = ResponseHeaders.of(OK);
 
         if (watch && timeoutSeconds > 0) {
@@ -137,7 +136,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> ctx.addAdditionalResponseHeaders(response.headers()))
+                   .doOnSuccess(response -> ctx.setAdditionalResponseHeaders(response.headers()))
                    .map(response -> response.contentUtf8());
     }
 
@@ -157,7 +156,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> ctx.addAdditionalResponseHeaders(response.headers()))
+                   .doOnSuccess(response -> ctx.setAdditionalResponseHeaders(response.headers()))
                    .map(response -> response.contentUtf8());
     }
 
