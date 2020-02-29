@@ -2,9 +2,6 @@ package info.matsumana.psystrike.config;
 
 import static com.linecorp.armeria.common.logging.LogLevel.DEBUG;
 import static com.linecorp.armeria.common.logging.LogLevel.WARN;
-import static info.matsumana.psystrike.service.ReverseProxyService.CLIENT_IDLE_TIMEOUT_MINUTES;
-
-import java.time.Duration;
 
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +23,6 @@ public class ArmeriaConfig {
     public ClientFactory clientFactory(PrometheusMeterRegistry registry) {
         return ClientFactory.builder()
                             .meterRegistry(registry)
-                            .idleTimeout(Duration.ofMinutes(CLIENT_IDLE_TIMEOUT_MINUTES))
                             .build();
     }
 
