@@ -2,8 +2,8 @@ FROM ubuntu:bionic-20191010 as builder
 
 RUN apt update && \
     apt install -y curl && \
-    curl -L -O https://download.bell-sw.com/java/13.0.1/bellsoft-jdk13.0.1-linux-amd64.deb && \
-    apt install -y -f ./bellsoft-jdk13.0.1-linux-amd64.deb
+    curl -L -O https://download.bell-sw.com/java/13.0.2+9/bellsoft-jdk13.0.2+9-linux-amd64.deb && \
+    apt install -y -f ./bellsoft-jdk13.0.2+9-linux-amd64.deb
 
 RUN useradd app
 USER app
@@ -20,7 +20,7 @@ RUN jar xvf *.jar
 
 
 # --------------------------------
-FROM ubuntu:bionic-20191010
+FROM ubuntu:bionic-20200219
 
 RUN useradd app
 RUN mkdir -p /app/log
@@ -48,10 +48,15 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
      \
-     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,level,tags:filesize=1024m,filecount=5", \
-     "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=512m", \
+     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:safepoint=debug:/app/log/safepoint_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:class+unload=debug:/app/log/class_unload_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-XX:ErrorFile=/app/log/hs_err_pid%p.log", \
+     \
+     "-XX:StartFlightRecording=name=on_startup,filename=/app/log/flight_recording.jfr,dumponexit=true,delay=2m,maxsize=1024m", \
      \
      "-XX:+ExitOnOutOfMemoryError", \
+     \
      "-XX:+HeapDumpOnOutOfMemoryError", \
      "-XX:HeapDumpPath=/app/log", \
      \
