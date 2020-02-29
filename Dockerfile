@@ -48,8 +48,7 @@ CMD ["/app/docker-entrypoint.sh", \
      "-Dcom.sun.management.jmxremote.ssl=false", \
      "-Dcom.sun.management.jmxremote.authenticate=false", \
      \
-     "-Xlog:gc*=debug:/app/log/gc_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
-     "-Xlog:safepoint=debug:/app/log/safepoint_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
+     "-Xlog:gc*=debug,safepoint=debug:/app/log/gc_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
      "-Xlog:class+unload=debug:/app/log/class_unload_%t_%p.log:time,uptime,level,tags:filesize=1024m,filecount=5", \
      "-XX:ErrorFile=/app/log/hs_err_pid%p.log", \
      \
