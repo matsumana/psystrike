@@ -24,13 +24,13 @@ import com.linecorp.armeria.client.HttpClient;
 import com.linecorp.armeria.client.WebClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
-import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerHttpClient;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
 import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.HttpData;
-import com.linecorp.armeria.common.HttpParameters;
 import com.linecorp.armeria.common.HttpResponse;
+import com.linecorp.armeria.common.QueryParams;
 import com.linecorp.armeria.common.RequestHeaders;
 import com.linecorp.armeria.common.ResponseHeaders;
 import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
@@ -73,7 +73,7 @@ public class ReverseProxyService {
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     @ProducesJson
-    public HttpResponse proxyApiServer(ServiceRequestContext ctx, HttpParameters params,
+    public HttpResponse proxyApiServer(ServiceRequestContext ctx, QueryParams params,
                                        @Param String actualUri) {
         final String uri = generateRequestUri(params, actualUri);
         final var requestHeader = RequestHeaders.of(GET, uri,
@@ -88,11 +88,11 @@ public class ReverseProxyService {
                                               .map(response -> HttpData.ofUtf8(response.contentUtf8()));
         final var responseHeader = ResponseHeaders.of(OK);
 
-        final var watch = params.getBoolean("watch", false);
+        final var watch = Boolean.parseBoolean(params.get("watch", "false"));
         final var timeoutSeconds = params.getInt("timeoutSeconds", 0);
 
         if (watch && timeoutSeconds > 0) {
-            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
+            ctx.setRequestTimeoutAfter(Duration.ofSeconds(timeoutSeconds + TIMEOUT_SECONDS_BUFFER));
             return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream));
         } else {
             return HttpResponse.of(Flux.concat(Flux.just(responseHeader), dataStream.take(1)));
@@ -148,7 +148,7 @@ public class ReverseProxyService {
                          .build());
     }
 
-    private Function<? super HttpClient, CircuitBreakerHttpClient> newCircuitBreakerDecorator(
+    private Function<? super HttpClient, CircuitBreakerClient> newCircuitBreakerDecorator(
             String hostname) {
         final CircuitBreakerBuilder builder;
         if (Strings.isNullOrEmpty(hostname)) {
@@ -165,11 +165,11 @@ public class ReverseProxyService {
                                                      .counterSlidingWindow(Duration.ofSeconds(60))
                                                      .build();
 
-        return CircuitBreakerHttpClient.newDecorator(circuitBreaker,
-                                                     CircuitBreakerStrategy.onServerErrorStatus());
+        return CircuitBreakerClient.newDecorator(circuitBreaker,
+                                                 CircuitBreakerStrategy.onServerErrorStatus());
     }
 
-    private String generateRequestUri(HttpParameters params, String actualUri) {
+    private String generateRequestUri(QueryParams params, String actualUri) {
         final String queryString = StreamSupport.stream(params.spliterator(), false)
                                                 .map(entry -> entry.getKey() + '=' + entry.getValue())
                                                 .collect(Collectors.joining("&"));
