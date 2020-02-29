@@ -71,10 +71,10 @@ scrape_configs:
   - job_name: 'kubernetes-pods'
     kubernetes_sd_configs:
       - role: pod
-        # for http
+        # via http
         # api_server: http://localhost:31000/
         #
-        # for https *Need tls_config.insecure_skip_verify=true as well
+        # via https *Need tls_config.insecure_skip_verify=true as well
         api_server: https://localhost:31000/
         tls_config:
           insecure_skip_verify: true
