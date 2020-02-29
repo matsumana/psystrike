@@ -24,6 +24,13 @@ spec:
           image: matsumana/psystrike:latest
           ports:
             - containerPort: 8080  # Application
+          env:
+            - name: TZ
+              value: Asia/Tokyo
+          #  - name: LOGGING_LEVEL_COM_LINECORP_ARMERIA_LOGGING_ACCESS
+          #    value: INFO
+          #  - name: LOGGING_LEVEL_INFO_MATSUMANA_PSYSTRIKE
+          #    value: DEBUG
           resources:
             requests:
               memory: "1Gi"
