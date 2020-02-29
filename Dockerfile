@@ -2,8 +2,8 @@ FROM ubuntu:bionic-20191010 as builder
 
 RUN apt update && \
     apt install -y curl && \
-    curl -L -O https://download.bell-sw.com/java/13.0.1/bellsoft-jdk13.0.1-linux-amd64.deb && \
-    apt install -y -f ./bellsoft-jdk13.0.1-linux-amd64.deb
+    curl -L -O https://download.bell-sw.com/java/13.0.2+9/bellsoft-jdk13.0.2+9-linux-amd64.deb && \
+    apt install -y -f ./bellsoft-jdk13.0.2+9-linux-amd64.deb
 
 RUN useradd app
 USER app
@@ -20,7 +20,7 @@ RUN jar xvf *.jar
 
 
 # --------------------------------
-FROM ubuntu:bionic-20191010
+FROM ubuntu:bionic-20200219
 
 RUN useradd app
 RUN mkdir -p /app/log
