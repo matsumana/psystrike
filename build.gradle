@@ -21,7 +21,7 @@ dependencyManagement {
     }
     dependencies {
         dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
-        dependency 'com.google.guava:guava:28.1-jre'
+        dependency 'com.google.guava:guava:28.2-jre'
     }
 }
 
