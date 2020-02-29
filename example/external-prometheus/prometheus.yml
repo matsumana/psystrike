@@ -71,7 +71,13 @@ scrape_configs:
   - job_name: 'kubernetes-pods'
     kubernetes_sd_configs:
       - role: pod
-        api_server: http://localhost:31000/
+        # for http
+        # api_server: http://localhost:31000/
+        #
+        # for https *Need tls_config.insecure_skip_verify=true as well
+        api_server: https://localhost:31000/
+        tls_config:
+          insecure_skip_verify: true
     relabel_configs:
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
         action: keep
