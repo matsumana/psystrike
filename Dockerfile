@@ -1,4 +1,4 @@
-FROM ubuntu:bionic-20191010 as builder
+FROM ubuntu:bionic-20200219 as builder
 
 RUN apt update && \
     apt install -y curl && \
