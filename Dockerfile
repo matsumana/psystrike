@@ -1,22 +1,18 @@
-FROM ubuntu:bionic-20200219 as builder
-
-RUN apt update && \
-    apt install -y curl && \
-    curl -L -O https://download.bell-sw.com/java/13.0.2+9/bellsoft-jdk13.0.2+9-linux-amd64.deb && \
-    apt install -y -f ./bellsoft-jdk13.0.2+9-linux-amd64.deb
+FROM adoptopenjdk:11.0.6_10-jdk-hotspot-bionic as builder
 
 RUN useradd app
 USER app
 
-WORKDIR /tmp
 RUN jlink \
     --compress=2 \
     --add-modules=java.base,jdk.unsupported,java.xml,java.desktop,jdk.management,jdk.management.agent,jdk.jfr \
-    --output=jre \
+    --output=/tmp/jre \
     --bind-services
 
 ADD ./build/libs/*.jar /tmp/app.jar
-RUN jar xvf *.jar
+
+WORKDIR /tmp
+RUN jar xvf app.jar
 
 
 # --------------------------------
