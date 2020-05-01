@@ -7,24 +7,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.linecorp.armeria.client.ClientFactory;
 import com.linecorp.armeria.server.logging.AccessLogWriter;
 import com.linecorp.armeria.server.logging.LoggingService;
 import com.linecorp.armeria.spring.AnnotatedServiceRegistrationBean;
 import com.linecorp.armeria.spring.ArmeriaServerConfigurator;
 
 import info.matsumana.psystrike.service.ReverseProxyService;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 
 @Configuration
-public class ArmeriaConfig {
-
-    @Bean
-    public ClientFactory clientFactory(PrometheusMeterRegistry registry) {
-        return ClientFactory.builder()
-                            .meterRegistry(registry)
-                            .build();
-    }
+public class ArmeriaServerConfig {
 
     @Bean
     public ArmeriaServerConfigurator armeriaServerConfigurator() {

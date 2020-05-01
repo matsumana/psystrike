@@ -9,6 +9,7 @@ import static java.util.Objects.requireNonNull;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -28,6 +29,7 @@ import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
 import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
+import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.QueryParams;
@@ -37,10 +39,12 @@ import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
+import com.linecorp.armeria.spring.MeterIdPrefixFunctionFactory;
 
 import hu.akarnokd.rxjava2.interop.ObservableInterop;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
+import io.netty.util.AsciiString;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -92,24 +96,24 @@ public class ReverseProxyService {
                                                  .build();
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
-        final Flux<HttpData> dataStream = Flux.from(ObservableInterop.fromFuture(client.execute(requestHeaders)
-                                                                                       .aggregate())
-                                                                     .toFlowable(BUFFER))
-                                              .doOnEach(wrappedResponse -> {
-                                                  final var response = requireNonNull(wrappedResponse.get());
+        final Flux<HttpData> dataStream =
+                Flux.from(ObservableInterop.fromFuture(client.execute(requestHeaders)
+                                                             .aggregate())
+                                           .toFlowable(BUFFER))
+                    .doOnEach(wrappedResponse -> {
+                        final var response = requireNonNull(wrappedResponse.get());
 
-                                                  if (watch && timeoutSeconds > 0) {
-                                                      log.debug("watched response={}", response.contentUtf8());
-                                                  }
+                        if (watch && timeoutSeconds > 0) {
+                            log.debug("watched response={}", response.contentUtf8());
+                        }
 
-                                                  final var responseHeaders = response.headers();
-                                                  ctx.setAdditionalResponseHeaders(responseHeaders);
-                                              })
-                                              .map(response -> HttpData.ofUtf8(response.contentUtf8()));
+                        mutateAdditionalResponseHeaders(ctx, response);
+                    })
+                    .map(response -> HttpData.ofUtf8(response.contentUtf8()));
         final var responseHeaders = ResponseHeaders.of(OK);
 
         if (watch && timeoutSeconds > 0) {
-            ctx.setRequestTimeoutAfter(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
+            ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
             return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
         } else {
             return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
@@ -136,7 +140,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> ctx.setAdditionalResponseHeaders(response.headers()))
+                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
                    .map(response -> response.contentUtf8());
     }
 
@@ -156,7 +160,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> ctx.setAdditionalResponseHeaders(response.headers()))
+                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
                    .map(response -> response.contentUtf8());
     }
 
@@ -167,9 +171,7 @@ public class ReverseProxyService {
                          .factory(clientFactory)
                          .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
                          .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MINUTES))
-                         .decorator(MetricCollectingClient.newDecorator(
-                                 MeterIdPrefixFunction.ofDefault("armeria.client")
-                                                      .withTags("server", String.format("%s:%d", host, port))))
+                         .decorator(newMetricsDecorator(host, port))
                          .decorator(newCircuitBreakerDecorator(host))
                          .build());
     }
@@ -181,6 +183,17 @@ public class ReverseProxyService {
                          .factory(clientFactory)
                          .decorator(newCircuitBreakerDecorator(""))
                          .build());
+    }
+
+    private static Function<? super HttpClient, MetricCollectingClient> newMetricsDecorator(String host,
+                                                                                            int port) {
+
+        final String type = "client";
+        final String serviceName = ReverseProxyService.class.getSimpleName();
+        final MeterIdPrefixFunction meterIdPrefixFunction = MeterIdPrefixFunctionFactory.ofDefault()
+                                                                                        .get(type, serviceName);
+        final String server = String.format("%s:%d", host, port);
+        return MetricCollectingClient.newDecorator(meterIdPrefixFunction.withTags("server", server));
     }
 
     private Function<? super HttpClient, CircuitBreakerClient> newCircuitBreakerDecorator(
@@ -217,6 +230,13 @@ public class ReverseProxyService {
 
         return generatePrefix(kubernetesProperties.getApiUriPrefix()) +
                "/api/" + actualUri + separator + queryString;
+    }
+
+    private static void mutateAdditionalResponseHeaders(ServiceRequestContext ctx,
+                                                        AggregatedHttpResponse response) {
+        ctx.mutateAdditionalResponseHeaders(
+                entries -> response.headers()
+                                   .forEach((BiConsumer<AsciiString, String>) entries::add));
     }
 
     @VisibleForTesting
