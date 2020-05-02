@@ -1,2 +1,3 @@
-.git/
-*.class
+*
+!/build/libs/*
+!/docker-entrypoint.sh
