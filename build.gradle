@@ -26,7 +26,6 @@ dependencyManagement {
 }
 
 dependencies {
-    implementation 'com.linecorp.armeria:armeria'
     implementation 'com.linecorp.armeria:armeria-spring-boot-webflux-starter'
     implementation 'com.linecorp.armeria:armeria-spring-boot-actuator-starter'
     implementation 'com.github.akarnokd:rxjava2-jdk8-interop'

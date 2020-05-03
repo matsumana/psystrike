@@ -1,10 +1,10 @@
 package info.matsumana.psystrike.service;
 
+import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
 import static com.linecorp.armeria.common.HttpStatus.OK;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
 import static io.reactivex.BackpressureStrategy.BUFFER;
-import static java.util.Objects.requireNonNull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -55,7 +55,6 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class ReverseProxyService {
 
-    private static final String HTTP_HEADER_ACCEPT_ENCODING = "accept-encoding";
     private static final String HTTP_HEADER_AUTHORIZATION_KEY = "Authorization";
     private static final String HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX = "Bearer ";
     private static final int CLIENT_MAX_RESPONSE_LENGTH_BYTE = 100 * 1024 * 1024;
@@ -85,15 +84,7 @@ public class ReverseProxyService {
         final String uri = generateRequestUri(params, actualUri);
 
         // create new headers with auth token
-        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
-                                                 .toBuilder()
-                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
-                                                 .add(HTTP_HEADER_AUTHORIZATION_KEY,
-                                                      HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX +
-                                                      kubernetesProperties.getBearerToken())
-                                                 .scheme(H2)
-                                                 .path(uri)
-                                                 .build();
+        final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, uri);
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
         final Flux<HttpData> dataStream =
@@ -101,14 +92,11 @@ public class ReverseProxyService {
                                                              .aggregate())
                                            .toFlowable(BUFFER))
                     .doOnEach(wrappedResponse -> {
-                        final var response = requireNonNull(wrappedResponse.get());
-
-                        if (watch && timeoutSeconds > 0) {
-                            log.debug("watched response={}", response.contentUtf8());
-                        }
-
+                        final var response = wrappedResponse.get();
+                        debugWatchedResponse(watch, timeoutSeconds, response);
                         mutateAdditionalResponseHeaders(ctx, response);
                     })
+                    .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
                     .map(response -> HttpData.ofUtf8(response.contentUtf8()));
         final var responseHeaders = ResponseHeaders.of(OK);
 
@@ -121,38 +109,32 @@ public class ReverseProxyService {
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    public Mono<String> proxyApiServerMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
-                                              @Param String host, @Param int port, @Param String actualUri) {
+    public Mono<HttpResponse> proxyApiServerMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                                    @Param String host, @Param int port,
+                                                    @Param String actualUri) {
 
         log.debug("proxyApiServerMetrics orgRequestHeaders={}", orgRequestHeaders);
 
         // create new headers with auth token
-        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
-                                                 .toBuilder()
-                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
-                                                 .add(HTTP_HEADER_AUTHORIZATION_KEY,
-                                                      HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX +
-                                                      kubernetesProperties.getBearerToken())
-                                                 .scheme(H2)
-                                                 .path(actualUri)
-                                                 .build();
+        final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, actualUri);
         final var client = newH2WebClientForApiServers(host, port);
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
                    .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
-                   .map(response -> response.contentUtf8());
+                   .doOnError(throwable -> log.error("Can't collect metrics from a k8s API server", throwable))
+                   .map(AggregatedHttpResponse::toHttpResponse);
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    public Mono<String> proxyPodMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
-                                        @Param String host, @Param int port, @Param String actualUri) {
+    public Mono<HttpResponse> proxyPodMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                              @Param String host, @Param int port, @Param String actualUri) {
 
         log.debug("proxyPodMetrics orgRequestHeaders={}", orgRequestHeaders);
 
         final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
                                                  .toBuilder()
-                                                 .removeAndThen(HTTP_HEADER_ACCEPT_ENCODING)
+                                                 .removeAndThen(ACCEPT_ENCODING)
                                                  .scheme(H1C)
                                                  .path(actualUri)
                                                  .build();
@@ -161,7 +143,20 @@ public class ReverseProxyService {
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
                    .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
-                   .map(response -> response.contentUtf8());
+                   .doOnError(throwable -> log.error("Can't collect metrics from a pod", throwable))
+                   .map(AggregatedHttpResponse::toHttpResponse);
+    }
+
+    private RequestHeaders newRequestHeadersForApiServers(RequestHeaders requestHeaders, String uri) {
+        final String authHeaderValue =
+                HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX + kubernetesProperties.getBearerToken();
+        return RequestHeaders.of(requestHeaders)
+                             .toBuilder()
+                             .removeAndThen(ACCEPT_ENCODING)
+                             .add(HTTP_HEADER_AUTHORIZATION_KEY, authHeaderValue)
+                             .scheme(H2)
+                             .path(uri)
+                             .build();
     }
 
     private WebClient newH2WebClientForApiServers(String host, int port) {
@@ -232,11 +227,28 @@ public class ReverseProxyService {
                "/api/" + actualUri + separator + queryString;
     }
 
+    private static void debugWatchedResponse(boolean watch, int timeoutSeconds,
+                                             AggregatedHttpResponse response) {
+        if (watch && timeoutSeconds > 0) {
+            final String content;
+            if (response != null) {
+                content = response.contentUtf8();
+            } else {
+                content = null;
+            }
+
+            log.debug("watched response={}", content);
+        }
+    }
+
     private static void mutateAdditionalResponseHeaders(ServiceRequestContext ctx,
                                                         AggregatedHttpResponse response) {
-        ctx.mutateAdditionalResponseHeaders(
-                entries -> response.headers()
-                                   .forEach((BiConsumer<AsciiString, String>) entries::add));
+
+        if (response != null) {
+            ctx.mutateAdditionalResponseHeaders(
+                    entries -> response.headers()
+                                       .forEach((BiConsumer<AsciiString, String>) entries::add));
+        }
     }
 
     @VisibleForTesting
