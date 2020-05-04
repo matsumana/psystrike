@@ -8,3 +8,6 @@ build
 *.ipr
 *.iws
 out/
+
+# https://github.com/line/gradle-scripts
+**/gen-src

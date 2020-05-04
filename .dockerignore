@@ -1,3 +1,4 @@
 *
-!/build/libs/*
+!/psystrike/build/libs/BOOT-INF
+!/psystrike/build/libs/META-INF
 !/docker-entrypoint.sh

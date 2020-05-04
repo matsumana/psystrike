@@ -1,48 +1,41 @@
 plugins {
-    id 'java'
     id 'org.springframework.boot' version '2.2.6.RELEASE'
     id 'io.spring.dependency-management' version '1.0.9.RELEASE'
+    id 'com.google.osdetector' version '1.6.2' apply false
 }
 
-group = 'info.matsumana.psystrike'
-version = '0.5.2-SNAPSHOT'
+// apply gradle-scripts
+apply from: "${rootDir}/gradle/scripts/build-flags.gradle"
 
-sourceCompatibility = JavaVersion.VERSION_11
-targetCompatibility = JavaVersion.VERSION_11
-[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+subprojects {
+    apply plugin: 'io.spring.dependency-management'
 
-repositories {
-    mavenCentral()
-}
-
-dependencyManagement {
-    imports {
-        mavenBom 'com.linecorp.armeria:armeria-bom:0.99.4'
+    repositories {
+        mavenCentral()
     }
+
+    dependencyManagement {
+        imports {
+            mavenBom 'com.linecorp.armeria:armeria-bom:0.99.4'
+        }
+        dependencies {
+            dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
+            dependency 'com.google.guava:guava:29.0-jre'
+        }
+    }
+}
+
+// Configure all Java projects
+configure(projectsWithFlags('java')) {
     dependencies {
-        dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
-        dependency 'com.google.guava:guava:29.0-jre'
+        implementation 'com.google.guava:guava'
+
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+
+        testImplementation('org.springframework.boot:spring-boot-starter-test') {
+            exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+        }
+        testImplementation 'org.assertj:assertj-core'
     }
-}
-
-dependencies {
-    implementation 'com.linecorp.armeria:armeria-spring-boot-webflux-starter'
-    implementation 'com.linecorp.armeria:armeria-spring-boot-actuator-starter'
-    implementation 'com.github.akarnokd:rxjava2-jdk8-interop'
-    implementation 'com.google.guava:guava'
-    implementation 'io.micrometer:micrometer-registry-prometheus'
-
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    compileOnly 'org.springframework.boot:spring-boot-configuration-processor'
-    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-
-    testImplementation('org.springframework.boot:spring-boot-starter-test') {
-        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
-    }
-    testImplementation 'org.assertj:assertj-core'
-}
-
-test {
-    useJUnitPlatform()
 }

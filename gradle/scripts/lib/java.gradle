@@ -1,0 +1,107 @@
+// Enable checkstyle if the rule file exists.
+def checkstyleConfigDir = "${rootProject.projectDir}/settings/checkstyle"
+def checkstyleEnabled = !rootProject.hasProperty('noCheckstyle') &&
+                        new File(checkstyleConfigDir).isDirectory() &&
+                        new File("${checkstyleConfigDir}/checkstyle.xml").isFile()
+
+configure(rootProject) {
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+}
+
+configure(projectsWithFlags('java')) {
+
+    apply plugin: 'java-library'
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+
+    archivesBaseName = project.ext.artifactId
+
+    // Delete the generated source directory on clean.
+    ext {
+        genSrcDir = "${projectDir}/gen-src"
+    }
+    clean {
+        delete project.ext.genSrcDir
+    }
+
+    // Add the generated source directories to the source sets.
+    project.sourceSets.all { sourceSet ->
+        sourceSet.java.srcDir file("${project.ext.genSrcDir}/${sourceSet.name}/java")
+        sourceSet.resources.srcDir file("${project.ext.genSrcDir}/${sourceSet.name}/resources")
+    }
+
+    java {
+        withJavadocJar()
+        withSourcesJar()
+
+        // Adds an optional configuration that can be used to define optional dependencies. While it's more
+        // idiomatic to define features for each set of optional dependencies (e.g., "prometheus",
+        // "dropwizard"), it's convenient to have a single one to fallback to.
+        registerFeature('optional') {
+            usingSourceSet(sourceSets.main)
+        }
+    }
+
+    // Set the sensible compiler options.
+    tasks.withType(JavaCompile) {
+        def task = delegate
+        sourceCompatibility = project.findProperty('javaSourceCompatibility') ?: '1.8'
+        targetCompatibility = project.findProperty('javaTargetCompatibility') ?: '1.8'
+        options.encoding = 'UTF-8'
+        options.warnings = false
+        options.compilerArgs += '-parameters'
+        project.configurations.each { Configuration cfg ->
+            if (cfg.name == 'annotationProcessor' || cfg.name.endsWith('AnnotationProcessor')) {
+                cfg.withDependencies { deps ->
+                    // Use incremental compilation only when there are no annotation processors,
+                    // because it seems to cause compilation errors for some processors such as Lombok.
+                    def useIncrementalCompilation = deps.size() == 0
+                    options.incremental = useIncrementalCompilation
+                    logger.info("${useIncrementalCompilation ? 'Enabling' : 'Disabling'} " +
+                            "incremental compilation for '${task.path}'")
+                }
+            }
+        }
+    }
+
+    // Enable full exception logging for test failures.
+    tasks.withType(Test) {
+        testLogging.exceptionFormat = 'full'
+    }
+
+    // Use JUnit platform.
+    tasks.withType(Test) {
+        useJUnitPlatform()
+    }
+
+    // Enforce checkstyle rules.
+    if (checkstyleEnabled) {
+        apply plugin: 'checkstyle'
+
+        checkstyle {
+            configFile = new File("${checkstyleConfigDir}/checkstyle.xml")
+            configProperties = ['checkstyleConfigDir': "$checkstyleConfigDir"]
+            if (managedVersions.containsKey('com.puppycrawl.tools:checkstyle')) {
+                toolVersion = managedVersions['com.puppycrawl.tools:checkstyle']
+            }
+        }
+
+        task checkstyle(group: 'Verification', description: 'Runs the checkstyle rules.') {}
+        project.sourceSets.all { SourceSet sourceSet ->
+            def dependencyTask = project.tasks.findByName("checkstyle${sourceSet.name.capitalize()}")
+            if (dependencyTask instanceof Checkstyle) {
+                tasks.checkstyle.dependsOn dependencyTask
+
+                // Run checkstyle as soon as possible after compilation to get feedback earlier.
+                tasks.named(sourceSet.compileJavaTaskName).configure {
+                    finalizedBy dependencyTask
+                }
+            }
+        }
+
+        test {
+            dependsOn tasks.checkstyle
+        }
+    }
+}

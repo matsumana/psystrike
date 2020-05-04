@@ -1,0 +1,11 @@
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation 'com.linecorp.armeria:armeria-spring-boot-webflux-starter'
+    implementation 'com.linecorp.armeria:armeria-spring-boot-actuator-starter'
+    implementation 'com.github.akarnokd:rxjava2-jdk8-interop'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    compileOnly 'org.springframework.boot:spring-boot-configuration-processor'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+}

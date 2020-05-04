@@ -17,9 +17,9 @@ USER app
 COPY --from=builder --chown=app:app /tmp/jre /app/jre
 
 # the app jar file is unarchived (ref: Makefile)
-COPY --chown=app:app ./build/libs/BOOT-INF/lib     /app/lib
-COPY --chown=app:app ./build/libs/META-INF         /app/META-INF
-COPY --chown=app:app ./build/libs/BOOT-INF/classes /app
+COPY --chown=app:app ./psystrike/build/libs/BOOT-INF/lib     /app/lib
+COPY --chown=app:app ./psystrike/build/libs/META-INF         /app/META-INF
+COPY --chown=app:app ./psystrike/build/libs/BOOT-INF/classes /app
 
 COPY --chown=app:app ./docker-entrypoint.sh /app/docker-entrypoint.sh
 

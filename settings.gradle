@@ -1,1 +1,6 @@
 rootProject.name = 'psystrike'
+include "psystrike"
+
+// settings for gradle-scripts
+apply from: "${rootDir}/gradle/scripts/settings-flags.gradle"
+includeWithFlags ':psystrike', 'java', 'publish'

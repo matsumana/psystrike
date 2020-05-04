@@ -1,0 +1,87 @@
+buildscript {
+    repositories {
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath "com.google.protobuf:protobuf-gradle-plugin:${managedVersions['com.google.protobuf:protobuf-gradle-plugin']}"
+    }
+}
+
+configure(projectsWithFlags('java')) {
+    // Add protobuf/gRPC support if there is src/*/proto
+    if (project.ext.hasSourceDirectory('proto')) {
+        apply plugin: com.google.protobuf.gradle.ProtobufPlugin
+
+        protobuf {
+            generatedFilesBaseDir = project.ext.genSrcDir
+            if (managedVersions.containsKey('com.google.protobuf:protoc')) {
+                protoc {
+                    artifact = "com.google.protobuf:protoc:${managedVersions['com.google.protobuf:protoc']}"
+                }
+            }
+
+            def grpcVersion = managedVersions['io.grpc:grpc-bom'] ?: managedVersions['io.grpc:grpc-core']
+            if (grpcVersion != null) {
+                plugins {
+                    grpc {
+                        artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+                    }
+                    if (project.ext.hasFlag('reactor-grpc') && managedVersions.containsKey('com.salesforce.servicelibs:reactor-grpc')) {
+                        reactorGrpc {
+                            artifact = "com.salesforce.servicelibs:reactor-grpc:${managedVersions['com.salesforce.servicelibs:reactor-grpc']}"
+                        }
+                    }
+                    if (project.ext.hasFlag('rxgrpc') && managedVersions.containsKey('com.salesforce.servicelibs:rxgrpc')) {
+                        rxgrpc {
+                            artifact = "com.salesforce.servicelibs:rxgrpc:${managedVersions['com.salesforce.servicelibs:reactor-grpc']}"
+                        }
+                    }
+                    if (project.ext.hasFlag('kotlin-grpc')) {
+                        kotlinGrpc {
+                            artifact = "io.grpc:protoc-gen-grpc-kotlin:${managedVersions['io.grpc:protoc-gen-grpc-kotlin']}"
+                        }
+                    }
+                }
+                generateProtoTasks {
+                    all()*.plugins {
+                        grpc {
+                            option 'enable_deprecated=false'
+                        }
+                        if (project.ext.hasFlag('reactor-grpc') && managedVersions.containsKey('com.salesforce.servicelibs:reactor-grpc')) {
+                            reactorGrpc {}
+                        }
+                        if (project.ext.hasFlag('rxgrpc') && managedVersions.containsKey('com.salesforce.servicelibs:rxgrpc')) {
+                            rxgrpc {}
+                        }
+                        if (project.ext.hasFlag('kotlin-grpc') && managedVersions.containsKey('io.grpc:grpc-kotlin-stub')) {
+                            kotlinGrpc {}
+                        }
+                    }
+                    all().each { task ->
+                        task.generateDescriptorSet = true
+                        task.descriptorSetOptions.includeSourceInfo = true
+                        task.descriptorSetOptions.includeImports = true
+                        task.descriptorSetOptions.path =
+                                "${project.ext.genSrcDir}/${task.sourceSet.name}/resources/" +
+                                        "META-INF/armeria/grpc/armeria-${task.sourceSet.name}.dsc"
+                    }
+                }
+            }
+        }
+
+        // Add the generated 'grpc' directories to the source sets.
+        project.sourceSets.all { sourceSet ->
+            sourceSet.java.srcDir file("${project.ext.genSrcDir}/${sourceSet.name}/grpc")
+        }
+
+        // Make sure protoc runs before the resources are copied so that .dsc files are included.
+        project.afterEvaluate {
+            project.sourceSets.each { sourceSet ->
+                def processResourcesTask = tasks.findByName(sourceSet.getTaskName('process', 'resources'))
+                if (processResourcesTask != null) {
+                    processResourcesTask.dependsOn(tasks.findByName(sourceSet.getTaskName('generate', 'proto')))
+                }
+            }
+        }
+    }
+}
