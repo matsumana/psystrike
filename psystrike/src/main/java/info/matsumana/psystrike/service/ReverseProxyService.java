@@ -45,13 +45,13 @@ import hu.akarnokd.rxjava2.interop.ObservableInterop;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Slf4j
 public class ReverseProxyService {
 

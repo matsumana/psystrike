@@ -1,3 +1,6 @@
+// change from `psystrike-psystrike` to `psystrike`
+artifactId = 'psystrike'
+
 apply plugin: 'org.springframework.boot'
 
 dependencies {
