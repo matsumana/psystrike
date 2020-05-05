@@ -1,10 +1,11 @@
 package info.matsumana.psystrike.service;
 
 import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
+import static com.linecorp.armeria.common.HttpHeaderNames.CONTENT_TYPE;
 import static com.linecorp.armeria.common.HttpStatus.OK;
+import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
-import static io.reactivex.BackpressureStrategy.BUFFER;
 
 import java.time.Duration;
 import java.util.Map;
@@ -31,6 +32,7 @@ import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreaker
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
+import com.linecorp.armeria.common.HttpHeaders;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.QueryParams;
 import com.linecorp.armeria.common.RequestHeaders;
@@ -41,7 +43,6 @@ import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.spring.MeterIdPrefixFunctionFactory;
 
-import hu.akarnokd.rxjava2.interop.ObservableInterop;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
@@ -87,25 +88,40 @@ public class ReverseProxyService {
         final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, uri);
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
-        final Flux<HttpData> dataStream =
-                Flux.from(ObservableInterop.fromFuture(client.execute(requestHeaders)
-                                                             .aggregate())
-                                           .toFlowable(BUFFER))
-                    .doOnEach(wrappedResponse -> {
-                        final var response = wrappedResponse.get();
-                        debugWatchedResponse(watch, timeoutSeconds, response);
-                        mutateAdditionalResponseHeaders(ctx, response);
-                    })
-                    .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
-                    .map(response -> HttpData.ofUtf8(response.contentUtf8()));
-        final var responseHeaders = ResponseHeaders.of(OK);
+        final Flux<HttpData> dataStream;
+        final HttpResponse httpResponse = client.execute(requestHeaders);
 
         if (watch && timeoutSeconds > 0) {
+            // streaming request
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
+            dataStream = Flux.from(httpResponse)
+                             .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
+                             .doOnNext(response -> {
+                                 if (response instanceof HttpData) {
+                                     final HttpData httpData = (HttpData) response;
+                                     log.debug("streaming response={}", httpData.toStringUtf8());
+                                 }
+                             })
+                             .map(response -> {
+                                 if (response instanceof HttpHeaders) {
+                                     return HttpData.empty();
+                                 } else {
+                                     final HttpData httpData = (HttpData) response;
+                                     return HttpData.ofUtf8(httpData.toStringUtf8());
+                                 }
+                             })
+                             .filter(httpData -> !httpData.isEmpty());
         } else {
-            return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream.take(1)));
+            // initial request
+            dataStream = Flux.from(Mono.fromFuture(httpResponse.aggregate()))
+                             .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
+                             .map(response -> HttpData.ofUtf8(response.contentUtf8()))
+                             .take(1);
         }
+
+        final var responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_UTF_8);
+
+        return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
@@ -121,7 +137,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
+                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
                    .doOnError(throwable -> log.error("Can't collect metrics from a k8s API server", throwable))
                    .map(AggregatedHttpResponse::toHttpResponse);
     }
@@ -142,7 +158,7 @@ public class ReverseProxyService {
 
         return Mono.fromFuture(client.execute(requestHeaders)
                                      .aggregate())
-                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response))
+                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
                    .doOnError(throwable -> log.error("Can't collect metrics from a pod", throwable))
                    .map(AggregatedHttpResponse::toHttpResponse);
     }
@@ -227,28 +243,10 @@ public class ReverseProxyService {
                "/api/" + actualUri + separator + queryString;
     }
 
-    private static void debugWatchedResponse(boolean watch, int timeoutSeconds,
-                                             AggregatedHttpResponse response) {
-        if (watch && timeoutSeconds > 0) {
-            final String content;
-            if (response != null) {
-                content = response.contentUtf8();
-            } else {
-                content = null;
-            }
-
-            log.debug("watched response={}", content);
-        }
-    }
-
     private static void mutateAdditionalResponseHeaders(ServiceRequestContext ctx,
-                                                        AggregatedHttpResponse response) {
-
-        if (response != null) {
-            ctx.mutateAdditionalResponseHeaders(
-                    entries -> response.headers()
-                                       .forEach((BiConsumer<AsciiString, String>) entries::add));
-        }
+                                                        ResponseHeaders responseHeaders) {
+        ctx.mutateAdditionalResponseHeaders(
+                entries -> responseHeaders.forEach((BiConsumer<AsciiString, String>) entries::add));
     }
 
     @VisibleForTesting

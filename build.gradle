@@ -19,7 +19,6 @@ subprojects {
             mavenBom 'com.linecorp.armeria:armeria-bom:0.99.4'
         }
         dependencies {
-            dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
             dependency 'com.google.guava:guava:29.0-jre'
         }
     }
