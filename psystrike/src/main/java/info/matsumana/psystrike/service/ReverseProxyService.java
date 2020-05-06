@@ -2,6 +2,7 @@ package info.matsumana.psystrike.service;
 
 import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
 import static com.linecorp.armeria.common.HttpHeaderNames.CONTENT_TYPE;
+import static com.linecorp.armeria.common.HttpHeaderNames.USER_AGENT;
 import static com.linecorp.armeria.common.HttpStatus.OK;
 import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
@@ -44,6 +45,7 @@ import com.linecorp.armeria.server.annotation.Param;
 import com.linecorp.armeria.spring.MeterIdPrefixFunctionFactory;
 
 import info.matsumana.psystrike.config.KubernetesProperties;
+import info.matsumana.psystrike.helper.AppVersionHelper;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +71,7 @@ public class ReverseProxyService {
     private final KubernetesProperties kubernetesProperties;
     private final PrometheusMeterRegistry registry;
     private final ClientFactory clientFactory;
+    private final AppVersionHelper appVersionHelper;
 
     // TODO Remove no longer used clients
     private final Map<String, WebClient> webClients = new ConcurrentHashMap<>();
@@ -148,12 +151,7 @@ public class ReverseProxyService {
 
         log.debug("proxyPodMetrics orgRequestHeaders={}", orgRequestHeaders);
 
-        final var requestHeaders = RequestHeaders.of(orgRequestHeaders)
-                                                 .toBuilder()
-                                                 .removeAndThen(ACCEPT_ENCODING)
-                                                 .scheme(H1C)
-                                                 .path(actualUri)
-                                                 .build();
+        final var requestHeaders = newRequestHeadersForPods(orgRequestHeaders, actualUri);
         final var client = newH1WebClientForPods(host, port);
 
         return Mono.fromFuture(client.execute(requestHeaders)
@@ -170,7 +168,18 @@ public class ReverseProxyService {
                              .toBuilder()
                              .removeAndThen(ACCEPT_ENCODING)
                              .add(HTTP_HEADER_AUTHORIZATION_KEY, authHeaderValue)
+                             .add(USER_AGENT, generateRequestHeaderUserAgent())
                              .scheme(H2)
+                             .path(uri)
+                             .build();
+    }
+
+    private RequestHeaders newRequestHeadersForPods(RequestHeaders orgRequestHeaders, @Param String uri) {
+        return RequestHeaders.of(orgRequestHeaders)
+                             .toBuilder()
+                             .removeAndThen(ACCEPT_ENCODING)
+                             .add(USER_AGENT, generateRequestHeaderUserAgent())
+                             .scheme(H1C)
                              .path(uri)
                              .build();
     }
@@ -247,6 +256,16 @@ public class ReverseProxyService {
                                                         ResponseHeaders responseHeaders) {
         ctx.mutateAdditionalResponseHeaders(
                 entries -> responseHeaders.forEach((BiConsumer<AsciiString, String>) entries::add));
+    }
+
+    @VisibleForTesting
+    String generateRequestHeaderUserAgent() {
+        final String version = appVersionHelper.getVersion().getArtifactVersion();
+        if (!Strings.isNullOrEmpty(version)) {
+            return "psystrike/" + version;
+        } else {
+            return "";
+        }
     }
 
     @VisibleForTesting
