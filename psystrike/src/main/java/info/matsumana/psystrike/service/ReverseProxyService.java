@@ -175,8 +175,8 @@ public class ReverseProxyService {
         return RequestHeaders.of(requestHeaders)
                              .toBuilder()
                              .removeAndThen(ACCEPT_ENCODING)
+                             .set(USER_AGENT, generateRequestHeaderUserAgent())
                              .add(HTTP_HEADER_AUTHORIZATION_KEY, authHeaderValue)
-                             .add(USER_AGENT, generateRequestHeaderUserAgent())
                              .scheme(H2)
                              .path(uri)
                              .build();
@@ -186,7 +186,7 @@ public class ReverseProxyService {
         return RequestHeaders.of(orgRequestHeaders)
                              .toBuilder()
                              .removeAndThen(ACCEPT_ENCODING)
-                             .add(USER_AGENT, generateRequestHeaderUserAgent())
+                             .set(USER_AGENT, generateRequestHeaderUserAgent())
                              .scheme(H1C)
                              .path(uri)
                              .build();
