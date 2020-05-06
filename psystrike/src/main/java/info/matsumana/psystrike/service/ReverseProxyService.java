@@ -4,6 +4,7 @@ import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
 import static com.linecorp.armeria.common.HttpHeaderNames.CONTENT_TYPE;
 import static com.linecorp.armeria.common.HttpHeaderNames.USER_AGENT;
 import static com.linecorp.armeria.common.HttpStatus.OK;
+import static com.linecorp.armeria.common.MediaTypeNames.JSON_SEQ;
 import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
@@ -91,11 +92,19 @@ public class ReverseProxyService {
         final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, uri);
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
+        final ResponseHeaders responseHeaders;
         final Flux<HttpData> dataStream;
         final HttpResponse httpResponse = client.execute(requestHeaders);
 
         if (watch && timeoutSeconds > 0) {
             // streaming request
+            //
+            // see also:
+            // https://www.soscon.net/content/data/session/Day%201_1330_3.pdf
+            // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-1/
+            // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-2/
+
+            responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_SEQ);
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
             dataStream = Flux.from(httpResponse)
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
@@ -116,13 +125,12 @@ public class ReverseProxyService {
                              .filter(httpData -> !httpData.isEmpty());
         } else {
             // initial request
+            responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_UTF_8);
             dataStream = Flux.from(Mono.fromFuture(httpResponse.aggregate()))
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
                              .map(response -> HttpData.ofUtf8(response.contentUtf8()))
                              .take(1);
         }
-
-        final var responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_UTF_8);
 
         return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
     }
