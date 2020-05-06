@@ -172,6 +172,7 @@ public class ReverseProxyService {
     private RequestHeaders newRequestHeadersForApiServers(RequestHeaders requestHeaders, String uri) {
         final String authHeaderValue =
                 HTTP_HEADER_AUTHORIZATION_VALUE_PREFIX + kubernetesProperties.getBearerToken();
+
         return RequestHeaders.of(requestHeaders)
                              .toBuilder()
                              .removeAndThen(ACCEPT_ENCODING)
@@ -182,7 +183,7 @@ public class ReverseProxyService {
                              .build();
     }
 
-    private RequestHeaders newRequestHeadersForPods(RequestHeaders orgRequestHeaders, @Param String uri) {
+    private RequestHeaders newRequestHeadersForPods(RequestHeaders orgRequestHeaders, String uri) {
         return RequestHeaders.of(orgRequestHeaders)
                              .toBuilder()
                              .removeAndThen(ACCEPT_ENCODING)
@@ -215,17 +216,16 @@ public class ReverseProxyService {
 
     private static Function<? super HttpClient, MetricCollectingClient> newMetricsDecorator(String host,
                                                                                             int port) {
-
         final String type = "client";
         final String serviceName = ReverseProxyService.class.getSimpleName();
         final MeterIdPrefixFunction meterIdPrefixFunction = MeterIdPrefixFunctionFactory.ofDefault()
                                                                                         .get(type, serviceName);
         final String server = String.format("%s:%d", host, port);
+
         return MetricCollectingClient.newDecorator(meterIdPrefixFunction.withTags("server", server));
     }
 
-    private Function<? super HttpClient, CircuitBreakerClient> newCircuitBreakerDecorator(
-            String hostname) {
+    private Function<? super HttpClient, CircuitBreakerClient> newCircuitBreakerDecorator(String hostname) {
         final CircuitBreakerBuilder builder;
         if (Strings.isNullOrEmpty(hostname)) {
             builder = CircuitBreaker.builder();
