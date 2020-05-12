@@ -4,7 +4,6 @@ import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
 import static com.linecorp.armeria.common.HttpHeaderNames.CONTENT_TYPE;
 import static com.linecorp.armeria.common.HttpHeaderNames.USER_AGENT;
 import static com.linecorp.armeria.common.HttpStatus.OK;
-import static com.linecorp.armeria.common.MediaTypeNames.JSON_SEQ;
 import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
@@ -104,7 +103,7 @@ public class ReverseProxyService {
             // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-1/
             // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-2/
 
-            responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_SEQ);
+            responseHeaders = ResponseHeaders.of(OK);
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
             dataStream = Flux.from(httpResponse)
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
