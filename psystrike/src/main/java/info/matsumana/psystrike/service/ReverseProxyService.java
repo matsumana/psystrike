@@ -28,7 +28,7 @@ import com.linecorp.armeria.client.WebClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerClient;
-import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerStrategy;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerRule;
 import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
@@ -241,7 +241,7 @@ public class ReverseProxyService {
                                                      .build();
 
         return CircuitBreakerClient.newDecorator(circuitBreaker,
-                                                 CircuitBreakerStrategy.onServerErrorStatus());
+                                                 CircuitBreakerRule.onServerErrorStatus());
     }
 
     private String generateRequestUri(QueryParams params, String actualUri) {
