@@ -3,12 +3,15 @@ APP_VERSION := $(shell grep '^version=' gradle.properties | perl -pe "s/version=
 .PHONY: all
 
 gradlew-clean-build:
-	./gradlew --no-daemon clean build && cd ./psystrike/build/libs && jar xvf *-$(APP_VERSION).jar
+	./gradlew --no-daemon clean build
 
-docker-build-local: gradlew-clean-build
+unarchive-jar: gradlew-clean-build
+	cd ./psystrike/build/libs && jar xvf *-$(APP_VERSION).jar
+
+docker-build-local: unarchive-jar
 	docker build -t localhost:5000/psystrike:latest .
 
-docker-build-hub: gradlew-clean-build
+docker-build-hub: unarchive-jar
 	docker build -t matsumana/psystrike:$(APP_VERSION) .
 
 docker-push-local: docker-build-local
