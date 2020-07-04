@@ -28,7 +28,7 @@ public class AppVersionMetricsConfig {
         final String repositoryStatus = versionInfo.getRepositoryStatus();
         final List<Tag> tags = List.of(Tag.of("version", version),
                                        Tag.of("commit", commit),
-                                       Tag.of("repoStatus", repositoryStatus));
+                                       Tag.of("repo_status", repositoryStatus));
         Gauge.builder("psystrike.build.info", () -> 1)
              .tags(tags)
              .description("A metric with a constant '1' value labeled by version and commit hash" +

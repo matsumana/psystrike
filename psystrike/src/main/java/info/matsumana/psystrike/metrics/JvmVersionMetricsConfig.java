@@ -16,8 +16,8 @@ public class JvmVersionMetricsConfig {
                                    @Value("${java.vm.version}") String vmVersion,
                                    @Value("${java.version}") String version,
                                    MeterRegistry meterRegistry) {
-        final List<Tag> tags = List.of(Tag.of("vmVendor", vmVendor),
-                                       Tag.of("vmVersion", vmVersion),
+        final List<Tag> tags = List.of(Tag.of("vm_vendor", vmVendor),
+                                       Tag.of("vm_version", vmVersion),
                                        Tag.of("version", version));
         Gauge.builder("jvm.build.info", () -> 1)
              .tags(tags)
