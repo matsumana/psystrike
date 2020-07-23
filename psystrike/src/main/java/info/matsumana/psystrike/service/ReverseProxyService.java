@@ -7,6 +7,7 @@ import static com.linecorp.armeria.common.HttpStatus.OK;
 import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
+import static java.util.Collections.singleton;
 
 import java.time.Duration;
 import java.util.Map;
@@ -42,10 +43,10 @@ import com.linecorp.armeria.common.metric.MeterIdPrefixFunction;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
-import com.linecorp.armeria.spring.MeterIdPrefixFunctionFactory;
 
 import info.matsumana.psystrike.config.KubernetesProperties;
 import info.matsumana.psystrike.helper.AppVersionHelper;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
 import lombok.RequiredArgsConstructor;
@@ -215,10 +216,10 @@ public class ReverseProxyService {
 
     private static Function<? super HttpClient, MetricCollectingClient> newMetricsDecorator(String host,
                                                                                             int port) {
-        final String type = "client";
         final String serviceName = ReverseProxyService.class.getSimpleName();
-        final MeterIdPrefixFunction meterIdPrefixFunction = MeterIdPrefixFunctionFactory.ofDefault()
-                                                                                        .get(type, serviceName);
+        final MeterIdPrefixFunction meterIdPrefixFunction =
+                MeterIdPrefixFunction.ofDefault("armeria.client")
+                                     .withTags(singleton(Tag.of("service", serviceName)));
         final String server = String.format("%s:%d", host, port);
 
         return MetricCollectingClient.newDecorator(meterIdPrefixFunction.withTags("server", server));

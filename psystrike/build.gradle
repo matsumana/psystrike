@@ -4,8 +4,8 @@ artifactId = 'psystrike'
 apply plugin: 'org.springframework.boot'
 
 dependencies {
-    implementation 'com.linecorp.armeria:armeria-spring-boot-webflux-starter'
-    implementation 'com.linecorp.armeria:armeria-spring-boot-actuator-starter'
+    implementation 'com.linecorp.armeria:armeria-spring-boot2-webflux-starter'
+    implementation 'com.linecorp.armeria:armeria-spring-boot2-actuator-starter'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
     compileOnly 'org.springframework.boot:spring-boot-configuration-processor'

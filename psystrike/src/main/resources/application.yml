@@ -1,6 +1,6 @@
 management:
   endpoints:
-    enabled-by-default: false   # Disable all of Actuator's endpoints
+    enabled-by-default: false   # Disable all of Spring Actuator's endpoints
 
 server:
   ssl:
@@ -8,7 +8,7 @@ server:
 
 armeria:
   ports:
-    - port: 8080    # Port 8080 will serve HTTPS and HTTP protocol.
+    - port: 8080    # This app serves both HTTP and HTTPS using 8080
       protocol: HTTP
   metrics-path: /metrics
   health-check-path: /healthz

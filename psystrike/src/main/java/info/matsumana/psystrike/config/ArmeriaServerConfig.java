@@ -1,15 +1,11 @@
 package info.matsumana.psystrike.config;
 
-import static com.linecorp.armeria.common.logging.LogLevel.DEBUG;
-import static com.linecorp.armeria.common.logging.LogLevel.WARN;
-
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.linecorp.armeria.server.logging.AccessLogWriter;
 import com.linecorp.armeria.server.logging.LoggingService;
-import com.linecorp.armeria.spring.AnnotatedServiceRegistrationBean;
 import com.linecorp.armeria.spring.ArmeriaServerConfigurator;
 
 import info.matsumana.psystrike.service.ReverseProxyService;
@@ -23,15 +19,12 @@ public class ArmeriaServerConfig {
     }
 
     @Bean
-    public AnnotatedServiceRegistrationBean reverseProxyServiceRegistrationBean(ReverseProxyService service) {
-        return new AnnotatedServiceRegistrationBean()
-                .setServiceName(service.getClass().getSimpleName())
-                .setService(service)
-                .setDecorators(LoggingService.builder()
-                                             .logger(LoggerFactory.getLogger(service.getClass()))
-                                             .requestLogLevel(DEBUG)
-                                             .successfulResponseLogLevel(DEBUG)
-                                             .failureResponseLogLevel(WARN)
-                                             .newDecorator());
+    public ArmeriaServerConfigurator armeriaServerConfigurator(ReverseProxyService service) {
+        return serverBuilder -> serverBuilder
+                .annotatedService()
+                .decorator(LoggingService.builder()
+                                         .logger(LoggerFactory.getLogger(service.getClass()))
+                                         .newDecorator())
+                .build(service);
     }
 }

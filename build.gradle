@@ -16,7 +16,7 @@ subprojects {
 
     dependencyManagement {
         imports {
-            mavenBom 'com.linecorp.armeria:armeria-bom:0.99.7'
+            mavenBom 'com.linecorp.armeria:armeria-bom:0.99.8'
         }
         dependencies {
             dependency 'com.google.guava:guava:29.0-jre'
