@@ -1,5 +1,5 @@
 plugins {
-    id 'org.springframework.boot' version '2.3.1.RELEASE'
+    id 'org.springframework.boot' version '2.3.2.RELEASE'
     id 'io.spring.dependency-management' version '1.0.9.RELEASE'
     id 'com.google.osdetector' version '1.6.2' apply false
 }
@@ -16,7 +16,7 @@ subprojects {
 
     dependencyManagement {
         imports {
-            mavenBom 'com.linecorp.armeria:armeria-bom:0.99.8'
+            mavenBom 'com.linecorp.armeria:armeria-bom:0.99.9'
         }
         dependencies {
             dependency 'com.google.guava:guava:29.0-jre'
