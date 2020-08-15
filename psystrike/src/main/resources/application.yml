@@ -4,11 +4,11 @@ management:
 
 server:
   ssl:
-    enabled: true   # Uses self-signed certificate because no key-store configuration is specified.
+    enabled: true   # Use self-signed certificate
 
 armeria:
   ports:
-    - port: 8080    # This app serves both HTTP and HTTPS using 8080
+    - port: 8080    # Serve both HTTP and HTTPS(enabled by `server.ssl.enabled=true`) using 8080
       protocol: HTTP
   metrics-path: /metrics
   health-check-path: /healthz

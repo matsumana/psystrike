@@ -1,10 +1,8 @@
 package info.matsumana.psystrike.service;
 
 import static com.linecorp.armeria.common.HttpHeaderNames.ACCEPT_ENCODING;
-import static com.linecorp.armeria.common.HttpHeaderNames.CONTENT_TYPE;
 import static com.linecorp.armeria.common.HttpHeaderNames.USER_AGENT;
 import static com.linecorp.armeria.common.HttpStatus.OK;
-import static com.linecorp.armeria.common.MediaTypeNames.JSON_UTF_8;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
 import static java.util.Collections.singleton;
@@ -29,12 +27,11 @@ import com.linecorp.armeria.client.WebClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreaker;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerClient;
+import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerListener;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerRule;
-import com.linecorp.armeria.client.circuitbreaker.MetricCollectingCircuitBreakerListener;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
-import com.linecorp.armeria.common.HttpHeaders;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.QueryParams;
 import com.linecorp.armeria.common.RequestHeaders;
@@ -67,7 +64,7 @@ public class ReverseProxyService {
     // In Prometheus, watch timeout is random in [minWatchTimeout, 2*minWatchTimeout]
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L78-L80
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
-    private static final int RESPONSE_TIMEOUT_MINUTES = 10;
+    private static final Duration RESPONSE_TIMEOUT_MINUTES = Duration.ofMinutes(10);
 
     private final KubernetesProperties kubernetesProperties;
     private final PrometheusMeterRegistry registry;
@@ -92,19 +89,19 @@ public class ReverseProxyService {
         final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, uri);
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
-        final ResponseHeaders responseHeaders;
         final Flux<HttpData> dataStream;
         final HttpResponse httpResponse = client.execute(requestHeaders);
 
         if (watch && timeoutSeconds > 0) {
-            // streaming request
+            // Streaming request for k8s Service Discovery by Prometheus
             //
             // see also:
             // https://www.soscon.net/content/data/session/Day%201_1330_3.pdf
+            // https://engineering.linecorp.com/en/blog/reactive-streams-armeria-1/
+            // https://engineering.linecorp.com/en/blog/reactive-streams-armeria-2/
             // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-1/
             // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-2/
 
-            responseHeaders = ResponseHeaders.of(OK);
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
             dataStream = Flux.from(httpResponse)
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
@@ -114,24 +111,16 @@ public class ReverseProxyService {
                                      log.debug("streaming response={}", httpData.toStringUtf8());
                                  }
                              })
-                             .map(response -> {
-                                 if (response instanceof HttpHeaders) {
-                                     return HttpData.empty();
-                                 } else {
-                                     final HttpData httpData = (HttpData) response;
-                                     return HttpData.ofUtf8(httpData.toStringUtf8());
-                                 }
-                             })
-                             .filter(httpData -> !httpData.isEmpty());
+                             .filter(response -> response instanceof HttpData)
+                             .map(response -> (HttpData) response);
         } else {
-            // initial request
-            responseHeaders = ResponseHeaders.of(OK, CONTENT_TYPE, JSON_UTF_8);
             dataStream = Flux.from(Mono.fromFuture(httpResponse.aggregate()))
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
-                             .map(response -> HttpData.ofUtf8(response.contentUtf8()))
+                             .map(response -> response.content())
                              .take(1);
         }
 
+        final ResponseHeaders responseHeaders = ResponseHeaders.of(OK);
         return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
     }
 
@@ -199,7 +188,7 @@ public class ReverseProxyService {
                 WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
                          .factory(clientFactory)
                          .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
-                         .responseTimeout(Duration.ofMinutes(RESPONSE_TIMEOUT_MINUTES))
+                         .responseTimeout(RESPONSE_TIMEOUT_MINUTES)
                          .decorator(newMetricsDecorator(host, port))
                          .decorator(newCircuitBreakerDecorator(host))
                          .build());
@@ -232,7 +221,7 @@ public class ReverseProxyService {
         } else {
             // with metrics
             builder = CircuitBreaker.builder("kube-apiserver_" + hostname)
-                                    .listener(new MetricCollectingCircuitBreakerListener(registry));
+                                    .listener(CircuitBreakerListener.metricCollecting(registry));
         }
         final CircuitBreaker circuitBreaker = builder.failureRateThreshold(0.1)
                                                      .minimumRequestThreshold(1)
