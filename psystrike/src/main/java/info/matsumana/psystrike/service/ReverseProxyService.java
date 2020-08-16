@@ -120,10 +120,10 @@ public class ReverseProxyService {
                              .filter(response -> response instanceof HttpData)
                              .map(response -> (HttpData) response);
         } else {
-            dataStream = Flux.from(Mono.fromFuture(httpResponse.aggregate()))
+            dataStream = Flux.from(httpResponse)
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
-                             .map(response -> response.content())
-                             .take(1);
+                             .filter(response -> response instanceof HttpData)
+                             .map(response -> (HttpData) response);
         }
 
         final ResponseHeaders responseHeaders = ResponseHeaders.of(OK);
