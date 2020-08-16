@@ -15,6 +15,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -29,6 +30,7 @@ import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerBuilder;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerClient;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerListener;
 import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerRule;
+import com.linecorp.armeria.client.logging.LoggingClient;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
@@ -192,8 +194,11 @@ public class ReverseProxyService {
                          .factory(clientFactory)
                          .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
                          .responseTimeout(RESPONSE_TIMEOUT_MINUTES)
-                         .decorator(newMetricsDecorator(host, port))
                          .decorator(newCircuitBreakerDecorator(host))
+                         .decorator(newMetricsDecorator(host, port))
+                         .decorator(LoggingClient.builder()
+                                                 .logger(LoggerFactory.getLogger(ReverseProxyService.class))
+                                                 .newDecorator())
                          .build());
     }
 
@@ -202,6 +207,9 @@ public class ReverseProxyService {
                 WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
                          .factory(clientFactory)
                          .decorator(newCircuitBreakerDecorator(""))
+                         .decorator(LoggingClient.builder()
+                                                 .logger(LoggerFactory.getLogger(ReverseProxyService.class))
+                                                 .newDecorator())
                          .build());
     }
 
