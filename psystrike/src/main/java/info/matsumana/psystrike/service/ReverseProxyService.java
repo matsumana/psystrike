@@ -32,6 +32,7 @@ import com.linecorp.armeria.client.circuitbreaker.CircuitBreakerRule;
 import com.linecorp.armeria.client.metric.MetricCollectingClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpData;
+import com.linecorp.armeria.common.HttpHeaders;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.QueryParams;
 import com.linecorp.armeria.common.RequestHeaders;
@@ -106,9 +107,12 @@ public class ReverseProxyService {
             dataStream = Flux.from(httpResponse)
                              .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
                              .doOnNext(response -> {
-                                 if (response instanceof HttpData) {
+                                 if (response instanceof HttpHeaders) {
+                                     final HttpHeaders httpHeaders = (HttpHeaders) response;
+                                     log.debug("streaming response httpHeaders={}", httpHeaders);
+                                 } else {
                                      final HttpData httpData = (HttpData) response;
-                                     log.debug("streaming response={}", httpData.toStringUtf8());
+                                     log.debug("streaming response httpData={}", httpData.toStringUtf8());
                                  }
                              })
                              .filter(response -> response instanceof HttpData)
@@ -184,7 +188,6 @@ public class ReverseProxyService {
 
     private WebClient newH2WebClientForApiServers(String host, int port) {
         return webClients.computeIfAbsent(host + ':' + port, key ->
-                // TODO get scheme via URI
                 WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
                          .factory(clientFactory)
                          .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
@@ -196,7 +199,6 @@ public class ReverseProxyService {
 
     private WebClient newH1WebClientForPods(String host, int port) {
         return webClients.computeIfAbsent(host + ':' + port, key ->
-                // TODO get scheme via URI
                 WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
                          .factory(clientFactory)
                          .decorator(newCircuitBreakerDecorator(""))

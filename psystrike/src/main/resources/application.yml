@@ -15,6 +15,5 @@ armeria:
 
 logging:
   level:
-    io.netty.handler.codec.http2: WARN
-    com.linecorp.armeria.logging.access: WARN   # for com.linecorp.armeria.server.logging.AccessLogWriter
+    com.linecorp.armeria.logging.access: WARN   # https://armeria.dev/docs/server-access-log/
     info.matsumana.psystrike: WARN

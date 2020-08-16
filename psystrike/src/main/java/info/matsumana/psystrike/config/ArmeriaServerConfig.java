@@ -14,13 +14,10 @@ import info.matsumana.psystrike.service.ReverseProxyService;
 public class ArmeriaServerConfig {
 
     @Bean
-    public ArmeriaServerConfigurator armeriaServerConfigurator() {
-        return builder -> builder.accessLogWriter(AccessLogWriter.combined(), false);
-    }
-
-    @Bean
     public ArmeriaServerConfigurator armeriaServerConfigurator(ReverseProxyService service) {
         return serverBuilder -> serverBuilder
+                .accessLogWriter(AccessLogWriter.combined(), false)
+                // ReverseProxyService
                 .annotatedService()
                 .decorator(LoggingService.builder()
                                          .logger(LoggerFactory.getLogger(service.getClass()))
