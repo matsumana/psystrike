@@ -2,14 +2,15 @@ management:
   endpoints:
     enabled-by-default: false   # Disable all of Spring Actuator's endpoints
 
-server:
-  ssl:
-    enabled: true   # Use self-signed certificate
-
 armeria:
   ports:
-    - port: 8080    # Serve both HTTP and HTTPS(enabled by `server.ssl.enabled=true`) using 8080
+    # Serve both HTTP and HTTPS(enabled by `server.ssl.enabled=true`) using 8080
+    - port: 8080
       protocol: HTTP
+    - port: 8080
+      protocol: HTTPS
+  ssl:
+    enabled: true
   metrics-path: /metrics
   health-check-path: /healthz
 

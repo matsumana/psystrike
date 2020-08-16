@@ -44,15 +44,16 @@ import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 
+import hu.akarnokd.rxjava2.interop.SingleInterop;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import info.matsumana.psystrike.helper.AppVersionHelper;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
+import io.reactivex.Flowable;
+import io.reactivex.Single;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 @Component
 @RequiredArgsConstructor
@@ -79,8 +80,7 @@ public class ReverseProxyService {
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     public HttpResponse proxyApiServer(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
-                                       QueryParams params,
-                                       @Param String actualUri) {
+                                       QueryParams params, @Param String actualUri) {
 
         log.debug("proxyApiServer orgRequestHeaders={}", orgRequestHeaders);
 
@@ -92,7 +92,7 @@ public class ReverseProxyService {
         final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, uri);
         final var client = newH2WebClientForApiServers(kubernetesProperties.getApiServer(),
                                                        kubernetesProperties.getApiServerPort());
-        final Flux<HttpData> dataStream;
+        final Flowable<HttpData> dataStream;
         final HttpResponse httpResponse = client.execute(requestHeaders);
 
         if (watch && timeoutSeconds > 0) {
@@ -106,34 +106,37 @@ public class ReverseProxyService {
             // https://engineering.linecorp.com/ja/blog/reactive-streams-with-armeria-2/
 
             ctx.setRequestTimeout(Duration.ofSeconds(timeoutSeconds + TIMEOUT_BUFFER_SECONDS));
-            dataStream = Flux.from(httpResponse)
-                             .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
-                             .doOnNext(response -> {
-                                 if (response instanceof HttpHeaders) {
-                                     final HttpHeaders httpHeaders = (HttpHeaders) response;
-                                     log.debug("streaming response httpHeaders={}", httpHeaders);
-                                 } else {
-                                     final HttpData httpData = (HttpData) response;
-                                     log.debug("streaming response httpData={}", httpData.toStringUtf8());
-                                 }
-                             })
-                             .filter(response -> response instanceof HttpData)
-                             .map(response -> (HttpData) response);
+            dataStream = Flowable.fromPublisher(httpResponse)
+                                 .doOnError(throwable -> log.error("Can't proxy to a k8s API server",
+                                                                   throwable))
+                                 .doOnNext(response -> {
+                                     if (response instanceof HttpHeaders) {
+                                         final HttpHeaders httpHeaders = (HttpHeaders) response;
+                                         log.debug("streaming response httpHeaders={}", httpHeaders);
+                                     } else {
+                                         final HttpData httpData = (HttpData) response;
+                                         log.debug("streaming response httpData={}", httpData.toStringUtf8());
+                                     }
+                                 })
+                                 .filter(response -> response instanceof HttpData)
+                                 .map(response -> (HttpData) response);
         } else {
-            dataStream = Flux.from(httpResponse)
-                             .doOnError(throwable -> log.error("Can't proxy to a k8s API server", throwable))
-                             .filter(response -> response instanceof HttpData)
-                             .map(response -> (HttpData) response);
+            dataStream = Flowable.fromPublisher(httpResponse)
+                                 .doOnError(throwable -> log.error("Can't proxy to a k8s API server",
+                                                                   throwable))
+                                 .filter(response -> response instanceof HttpData)
+                                 .map(response -> (HttpData) response);
         }
 
         final ResponseHeaders responseHeaders = ResponseHeaders.of(OK);
-        return HttpResponse.of(Flux.concat(Flux.just(responseHeaders), dataStream));
+        return HttpResponse.of(Flowable.concat(Flowable.just(responseHeaders), dataStream));
     }
 
     @Get("regex:^/apiservers/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    public Mono<HttpResponse> proxyApiServerMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
-                                                    @Param String host, @Param int port,
-                                                    @Param String actualUri) {
+    public Single<HttpResponse> proxyApiServerMetrics(ServiceRequestContext ctx,
+                                                      RequestHeaders orgRequestHeaders,
+                                                      @Param String host, @Param int port,
+                                                      @Param String actualUri) {
 
         log.debug("proxyApiServerMetrics orgRequestHeaders={}", orgRequestHeaders);
 
@@ -141,27 +144,28 @@ public class ReverseProxyService {
         final var requestHeaders = newRequestHeadersForApiServers(orgRequestHeaders, actualUri);
         final var client = newH2WebClientForApiServers(host, port);
 
-        return Mono.fromFuture(client.execute(requestHeaders)
-                                     .aggregate())
-                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
-                   .doOnError(throwable -> log.error("Can't collect metrics from a k8s API server", throwable))
-                   .map(AggregatedHttpResponse::toHttpResponse);
+        return SingleInterop.fromFuture(client.execute(requestHeaders)
+                                              .aggregate())
+                            .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
+                            .doOnError(throwable -> log.error("Can't collect metrics from a k8s API server",
+                                                              throwable))
+                            .map(AggregatedHttpResponse::toHttpResponse);
     }
 
     @Get("regex:^/pods/(?<host>.*?)/(?<port>.*?)/(?<actualUri>.*)$")
-    public Mono<HttpResponse> proxyPodMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
-                                              @Param String host, @Param int port, @Param String actualUri) {
+    public Single<HttpResponse> proxyPodMetrics(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
+                                                @Param String host, @Param int port, @Param String actualUri) {
 
         log.debug("proxyPodMetrics orgRequestHeaders={}", orgRequestHeaders);
 
         final var requestHeaders = newRequestHeadersForPods(orgRequestHeaders, actualUri);
         final var client = newH1WebClientForPods(host, port);
 
-        return Mono.fromFuture(client.execute(requestHeaders)
-                                     .aggregate())
-                   .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
-                   .doOnError(throwable -> log.error("Can't collect metrics from a pod", throwable))
-                   .map(AggregatedHttpResponse::toHttpResponse);
+        return SingleInterop.fromFuture(client.execute(requestHeaders)
+                                              .aggregate())
+                            .doOnSuccess(response -> mutateAdditionalResponseHeaders(ctx, response.headers()))
+                            .doOnError(throwable -> log.error("Can't collect metrics from a pod", throwable))
+                            .map(AggregatedHttpResponse::toHttpResponse);
     }
 
     private RequestHeaders newRequestHeadersForApiServers(RequestHeaders requestHeaders, String uri) {

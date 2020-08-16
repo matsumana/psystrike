@@ -20,6 +20,7 @@ subprojects {
         }
         dependencies {
             dependency 'com.google.guava:guava:29.0-jre'
+            dependency 'com.github.akarnokd:rxjava2-jdk8-interop:0.3.7'
         }
     }
 }
