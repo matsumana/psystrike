@@ -8,6 +8,7 @@ dependencies {
     implementation 'com.linecorp.armeria:armeria-spring-boot2-actuator-starter'
     implementation 'com.linecorp.armeria:armeria-rxjava2'
     implementation 'com.github.akarnokd:rxjava2-jdk8-interop'
+    implementation 'org.apache.commons:commons-lang3'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
     compileOnly 'org.springframework.boot:spring-boot-configuration-processor'

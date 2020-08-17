@@ -1,0 +1,8 @@
+logging:
+  level:
+    info.matsumana.psystrike: DEBUG
+
+psystrike-cleanup-timer:
+  delay-seconds: 3600  # 60min
+  period-seconds: 3600  # 60min
+  remove-threshold-seconds: 3600  # 60min

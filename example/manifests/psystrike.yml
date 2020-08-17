@@ -31,13 +31,19 @@ spec:
           #    value: INFO
           #  - name: LOGGING_LEVEL_INFO_MATSUMANA_PSYSTRIKE
           #    value: DEBUG
+          #  - name: PSYSTRIKE_CLEANUP_TIMER_DELAY_SECONDS
+          #    value: "10"
+          #  - name: PSYSTRIKE_CLEANUP_TIMER_PERIOD_SECONDS
+          #    value: "300"
+          #  - name: PSYSTRIKE_CLEANUP_TIMER_REMOVE_THRESHOLD_SECONDS
+          #    value: "600"
           resources:
             requests:
               memory: 512Mi
-              cpu: 1
+              cpu: "1"
             limits:
               memory: 512Mi
-              cpu: 1
+              cpu: "1"
           livenessProbe:
             httpGet:
               path: /healthz

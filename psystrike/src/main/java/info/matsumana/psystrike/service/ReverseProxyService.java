@@ -5,16 +5,25 @@ import static com.linecorp.armeria.common.HttpHeaderNames.USER_AGENT;
 import static com.linecorp.armeria.common.HttpStatus.OK;
 import static com.linecorp.armeria.common.SessionProtocol.H1C;
 import static com.linecorp.armeria.common.SessionProtocol.H2;
+import static java.time.temporal.ChronoUnit.SECONDS;
 import static java.util.Collections.singleton;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import javax.annotation.PostConstruct;
+
+import org.apache.commons.lang3.tuple.MutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -45,6 +54,7 @@ import com.linecorp.armeria.server.annotation.Get;
 import com.linecorp.armeria.server.annotation.Param;
 
 import hu.akarnokd.rxjava2.interop.SingleInterop;
+import info.matsumana.psystrike.config.CleanupTimerProperties;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import info.matsumana.psystrike.helper.AppVersionHelper;
 import io.micrometer.core.instrument.Tag;
@@ -70,13 +80,20 @@ public class ReverseProxyService {
     // https://github.com/prometheus/prometheus/blob/v2.14.0/vendor/k8s.io/client-go/tools/cache/reflector.go#L262
     private static final Duration RESPONSE_TIMEOUT_MINUTES = Duration.ofMinutes(10);
 
+    private final Map<String, Pair<WebClient, LocalDateTime>> webClients = new ConcurrentHashMap<>();
+    private final Timer webClientsCleanupTimer = new Timer("WebClientsCleanupTimer");
+
     private final KubernetesProperties kubernetesProperties;
+    private final CleanupTimerProperties cleanupTimerProperties;
     private final PrometheusMeterRegistry registry;
     private final ClientFactory clientFactory;
     private final AppVersionHelper appVersionHelper;
+    private final Clock clock;
 
-    // TODO Remove no longer used clients
-    private final Map<String, WebClient> webClients = new ConcurrentHashMap<>();
+    @PostConstruct
+    void postConstruct() {
+        setupWebClientsCleanupTimer(webClients, clock, cleanupTimerProperties);
+    }
 
     @Get("regex:^/api/(?<actualUri>.*)$")
     public HttpResponse proxyApiServer(ServiceRequestContext ctx, RequestHeaders orgRequestHeaders,
@@ -193,28 +210,38 @@ public class ReverseProxyService {
     }
 
     private WebClient newH2WebClientForApiServers(String host, int port) {
-        return webClients.computeIfAbsent(host + ':' + port, key ->
-                WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
-                         .factory(clientFactory)
-                         .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
-                         .responseTimeout(RESPONSE_TIMEOUT_MINUTES)
-                         .decorator(newCircuitBreakerDecorator(host))
-                         .decorator(newMetricsDecorator(host, port))
-                         .decorator(LoggingClient.builder()
-                                                 .logger(LoggerFactory.getLogger(ReverseProxyService.class))
-                                                 .newDecorator())
-                         .build());
+        final Pair<WebClient, LocalDateTime> pair =
+                webClients.computeIfAbsent(host + ':' + port, key -> {
+                    final LocalDateTime usedAt = LocalDateTime.now(clock);
+                    final WebClient webClient =
+                            WebClient.builder(String.format("%s://%s:%d/", H2.uriText(), host, port))
+                                     .factory(clientFactory)
+                                     .maxResponseLength(CLIENT_MAX_RESPONSE_LENGTH_BYTE)
+                                     .responseTimeout(RESPONSE_TIMEOUT_MINUTES)
+                                     .decorator(newCircuitBreakerDecorator(host))
+                                     .decorator(newMetricsDecorator(host, port))
+                                     .decorator(newLoggingClientDecorator())
+                                     .build();
+                    return MutablePair.of(webClient, usedAt);
+                });
+        pair.setValue(LocalDateTime.now(clock));
+        return pair.getLeft();
     }
 
     private WebClient newH1WebClientForPods(String host, int port) {
-        return webClients.computeIfAbsent(host + ':' + port, key ->
-                WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
-                         .factory(clientFactory)
-                         .decorator(newCircuitBreakerDecorator(""))
-                         .decorator(LoggingClient.builder()
-                                                 .logger(LoggerFactory.getLogger(ReverseProxyService.class))
-                                                 .newDecorator())
-                         .build());
+        final Pair<WebClient, LocalDateTime> pair =
+                webClients.computeIfAbsent(host + ':' + port, key -> {
+                    final LocalDateTime usedAt = LocalDateTime.now(clock);
+                    final WebClient webClient =
+                            WebClient.builder(String.format("%s://%s:%d/", H1C.uriText(), host, port))
+                                     .factory(clientFactory)
+                                     .decorator(newCircuitBreakerDecorator(""))
+                                     .decorator(newLoggingClientDecorator())
+                                     .build();
+                    return MutablePair.of(webClient, usedAt);
+                });
+        pair.setValue(LocalDateTime.now(clock));
+        return pair.getLeft();
     }
 
     private static Function<? super HttpClient, MetricCollectingClient> newMetricsDecorator(String host,
@@ -246,6 +273,12 @@ public class ReverseProxyService {
 
         return CircuitBreakerClient.newDecorator(circuitBreaker,
                                                  CircuitBreakerRule.onServerErrorStatus());
+    }
+
+    private static Function<? super HttpClient, LoggingClient> newLoggingClientDecorator() {
+        return LoggingClient.builder()
+                            .logger(LoggerFactory.getLogger(ReverseProxyService.class))
+                            .newDecorator();
     }
 
     private String generateRequestUri(QueryParams params, String actualUri) {
@@ -285,5 +318,38 @@ public class ReverseProxyService {
                 StringUtils.trimTrailingCharacter(prefix, '/'),
                 '/');
         return !s.isEmpty() ? '/' + s : "";
+    }
+
+    @VisibleForTesting
+    void setupWebClientsCleanupTimer(Map<String, Pair<WebClient, LocalDateTime>> webClients,
+                                     Clock clock, CleanupTimerProperties cleanupTimerProperties) {
+        final TimerTask webClientsCleanupTask = new TimerTask() {
+            @Override
+            public void run() {
+                final LocalDateTime now = LocalDateTime.now(clock);
+
+                log.debug("before: webClients.size={}", webClients.size());
+
+                webClients.forEach((host, pair) -> {
+                    final LocalDateTime usedAt = pair.getRight();
+                    final long diff = SECONDS.between(usedAt, now);
+                    final long removeThreshold = cleanupTimerProperties.getRemoveThresholdSeconds();
+
+                    log.debug("host={}, usedAt={}, now={} diff={}, removeThreshold={}",
+                              host, usedAt, now, diff, removeThreshold);
+
+                    if (diff > removeThreshold) {
+                        log.debug("remove {} from webClients", host);
+                        webClients.remove(host);
+                    }
+                });
+
+                log.debug("after: webClients.size={}", webClients.size());
+            }
+        };
+
+        final int delay = cleanupTimerProperties.getDelaySeconds() * 1000;
+        final int period = cleanupTimerProperties.getPeriodSeconds() * 1000;
+        webClientsCleanupTimer.scheduleAtFixedRate(webClientsCleanupTask, delay, period);
     }
 }

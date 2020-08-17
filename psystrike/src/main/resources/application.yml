@@ -18,3 +18,8 @@ logging:
   level:
     com.linecorp.armeria.logging.access: WARN   # https://armeria.dev/docs/server-access-log/
     info.matsumana.psystrike: WARN
+
+psystrike-cleanup-timer:
+  delay-seconds: 60  # 1min
+  period-seconds: 1800  # 30min
+  remove-threshold-seconds: 3600  # 60min
