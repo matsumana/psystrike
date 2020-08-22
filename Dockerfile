@@ -1,4 +1,4 @@
-FROM adoptopenjdk:11.0.7_10-jdk-hotspot-bionic as builder
+FROM adoptopenjdk:11.0.8_10-jdk-hotspot-bionic as builder
 
 RUN jlink \
     --compress=2 \
@@ -7,7 +7,7 @@ RUN jlink \
     --bind-services
 
 # --------------------------------
-FROM ubuntu:bionic-20200219
+FROM ubuntu:bionic-20200807
 
 RUN useradd app
 RUN mkdir -p /app/log
