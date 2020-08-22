@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: psystrike
-          image: matsumana/psystrike:1.0.4
+          image: matsumana/psystrike:1.1.0
           ports:
             - containerPort: 8080  # Application
           env:
