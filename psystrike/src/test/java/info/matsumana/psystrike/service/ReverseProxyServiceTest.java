@@ -16,6 +16,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import com.linecorp.armeria.client.WebClient;
 
 import info.matsumana.psystrike.config.CleanupTimerProperties;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 @SpringBootTest
 public class ReverseProxyServiceTest {
@@ -63,18 +65,27 @@ public class ReverseProxyServiceTest {
         webClients.put("host3:8080", ImmutablePair.of(WebClient.of(), now.minusSeconds(30)));
 
         reverseProxyService.setupWebClientsCleanupTimer(webClients, clock, cleanupTimerProperties);
+        final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        reverseProxyService.setupMetrics(meterRegistry, webClients);
+        final Gauge gauge = meterRegistry.find("psystrike.webclients")
+                                         .gauge();
+        assertThat(gauge).isNotNull();
         assertThat(webClients.size()).isEqualTo(3);
+        assertThat(gauge.value()).isEqualTo(3);
 
         Thread.sleep(cleanupTimerProperties.getDelaySeconds() * 1_000 + SLEEP_BUFFER_MILLIS);
         assertThat(webClients.size()).isEqualTo(2);
+        assertThat(gauge.value()).isEqualTo(2);
         assertThat(webClients.get("host1:8080")).isNotNull();
         assertThat(webClients.get("host2:8080")).isNotNull();
 
         Thread.sleep(cleanupTimerProperties.getPeriodSeconds() * 1_000 + SLEEP_BUFFER_MILLIS);
-        assertThat(webClients.size()).isEqualTo(1);
+        assertThat(webClients.size()).isOne();
+        assertThat(gauge.value()).isOne();
         assertThat(webClients.get("host1:8080")).isNotNull();
 
         Thread.sleep(cleanupTimerProperties.getPeriodSeconds() * 1_000 + SLEEP_BUFFER_MILLIS);
-        assertThat(webClients.size()).isEqualTo(0);
+        assertThat(webClients.size()).isZero();
+        assertThat(gauge.value()).isZero();
     }
 }

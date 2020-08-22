@@ -57,8 +57,9 @@ import hu.akarnokd.rxjava2.interop.SingleInterop;
 import info.matsumana.psystrike.config.CleanupTimerProperties;
 import info.matsumana.psystrike.config.KubernetesProperties;
 import info.matsumana.psystrike.helper.AppVersionHelper;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.util.AsciiString;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
@@ -85,7 +86,7 @@ public class ReverseProxyService {
 
     private final KubernetesProperties kubernetesProperties;
     private final CleanupTimerProperties cleanupTimerProperties;
-    private final PrometheusMeterRegistry registry;
+    private final MeterRegistry meterRegistry;
     private final ClientFactory clientFactory;
     private final AppVersionHelper appVersionHelper;
     private final Clock clock;
@@ -93,6 +94,7 @@ public class ReverseProxyService {
     @PostConstruct
     void postConstruct() {
         setupWebClientsCleanupTimer(webClients, clock, cleanupTimerProperties);
+        setupMetrics(meterRegistry, webClients);
     }
 
     @Get("regex:^/api/(?<actualUri>.*)$")
@@ -262,7 +264,7 @@ public class ReverseProxyService {
         } else {
             // with metrics
             builder = CircuitBreaker.builder("kube-apiserver_" + hostname)
-                                    .listener(CircuitBreakerListener.metricCollecting(registry));
+                                    .listener(CircuitBreakerListener.metricCollecting(meterRegistry));
         }
         final CircuitBreaker circuitBreaker = builder.failureRateThreshold(0.1)
                                                      .minimumRequestThreshold(1)
@@ -351,5 +353,12 @@ public class ReverseProxyService {
         final int delay = cleanupTimerProperties.getDelaySeconds() * 1000;
         final int period = cleanupTimerProperties.getPeriodSeconds() * 1000;
         webClientsCleanupTimer.scheduleAtFixedRate(webClientsCleanupTask, delay, period);
+    }
+
+    @VisibleForTesting
+    void setupMetrics(MeterRegistry meterRegistry, Map<String, Pair<WebClient, LocalDateTime>> webClients) {
+        Gauge.builder("psystrike.webclients", webClients::size)
+             .description("Number of WebClients")
+             .register(meterRegistry);
     }
 }

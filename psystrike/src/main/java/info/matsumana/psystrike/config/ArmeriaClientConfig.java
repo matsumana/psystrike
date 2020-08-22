@@ -5,13 +5,13 @@ import org.springframework.context.annotation.Configuration;
 
 import com.linecorp.armeria.client.ClientFactory;
 
-import io.micrometer.prometheus.PrometheusMeterRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration
 public class ArmeriaClientConfig {
 
     @Bean
-    public ClientFactory clientFactory(PrometheusMeterRegistry registry) {
+    public ClientFactory clientFactory(MeterRegistry registry) {
         // Save Armeria client metrics into the same registry with Armeria server
         return ClientFactory.builder()
                             .meterRegistry(registry)
